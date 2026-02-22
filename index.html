@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weekly Update Builder</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header>
+  <div class="logo">Weekly <span>Update</span> Builder</div>
+  <div class="header-right">
+    <span class="save-status" id="saveStatus"></span>
+    <div class="week-badge" id="weekBadge">Loading...</div>
+  </div>
+</header>
+
+<!-- SIDEBAR -->
+<div class="history-pane">
+  <div class="history-label">History</div>
+  <button class="btn-new-week" onclick="startNewWeek()">+ New Week</button>
+  <div id="historyList"></div>
+
+  <div class="sparkline-wrap" id="sparkWrap" style="display:none">
+    <div class="sparkline-title">Conversations / Week</div>
+    <svg class="sparkline-chart" id="sparkSvg" viewBox="0 0 160 48" preserveAspectRatio="none"></svg>
+    <div class="sparkline-labels" id="sparkLabels"></div>
+  </div>
+</div>
+
+<!-- EDITOR -->
+<div class="editor-pane">
+
+  <div class="card">
+    <div class="card-title"><span class="dot" style="background:var(--accent)"></span> Report Period</div>
+    <div class="grid2">
+      <div class="field"><span class="lbl">Team</span><input type="text" id="teamName"></div>
+      <div class="field"><span class="lbl">Date Range</span><input type="text" id="dateRange"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="dot" style="background:var(--accent2)"></span> CS Router Metrics</div>
+    <div class="field"><span class="lbl">Metric Period</span><input type="text" id="metricPeriod"></div>
+    <div class="grid2">
+      <div class="field">
+        <span class="lbl">Total Conversations</span>
+        <input type="number" id="totalConversations" placeholder="3032">
+        <div class="metric-hint" id="convHint"></div>
+      </div>
+      <div class="field">
+        <span class="lbl">Median Response Time</span>
+        <input type="text" id="medianResponseTime" placeholder="2 minutes 11 seconds">
+        <div class="goal-indicator" id="goalIndicator"></div>
+      </div>
+      <div class="field" style="grid-column:1/-1">
+        <span class="lbl">Response Time Goal</span>
+        <input type="text" id="responseGoal">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="dot" style="background:var(--warn)"></span> Meetings Attended</div>
+    <div id="meetingsList" class="bullet-list"></div>
+    <button class="btn-add" onclick="addMeeting()">+ Add Meeting</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="dot" style="background:var(--accent2)"></span> Accomplishments / Updates</div>
+    <div class="sub-label">Recurring Items</div>
+    <div id="presetsGrid"></div>
+    <hr class="divider">
+    <div class="sub-label">One-off Items This Week</div>
+    <div id="bulletsList" class="bullet-list"></div>
+    <button class="btn-add" onclick="addBullet()">+ Add Item</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="dot" style="background:var(--danger)"></span> Front Office Sync / Upcoming</div>
+    <div class="field"><span class="lbl">Meeting Title</span><input type="text" id="syncMeeting"></div>
+    <div id="syncItems" class="bullet-list"></div>
+    <button class="btn-add" onclick="addSyncItem()">+ Add Agenda Item</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="dot" style="background:var(--muted)"></span> Private Notes</div>
+    <textarea id="privateNotes" class="notes-area" placeholder="Context for yourself — not included in the report. (e.g. 'spike on Tuesday due to outage', 'follow up with Ashley on X')"></textarea>
+  </div>
+
+</div>
+
+<!-- PREVIEW -->
+<div class="preview-pane">
+  <div class="preview-header">
+    <span class="pane-label">Live Preview</span>
+    <div class="preview-actions">
+      <button class="btn-reset" onclick="resetWeek()">Reset</button>
+      <button class="btn-slack" id="slackBtn" onclick="copySlack()">⧓ Copy for Slack</button>
+      <button class="btn-copy" id="copyBtn" onclick="copyPlain()">⎘ Copy Plain</button>
+    </div>
+  </div>
+  <div class="preview-box" id="previewBox">Start filling in the form to see your report...</div>
+  <div class="preview-footer">
+    <div class="char-count" id="charCount"></div>
+    <div style="font-size:10px; color: var(--muted)">⧓ = Slack bold formatting &nbsp;|&nbsp; ⎘ = plain text</div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
