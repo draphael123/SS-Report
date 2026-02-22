@@ -4,14 +4,24 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Weekly Update Builder</title>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
+<!-- Week-end reminder banner -->
+<div class="reminder-banner" id="reminderBanner" style="display:none">
+  <span id="reminderText"></span>
+</div>
+
 <header>
-  <div class="logo">Weekly <span>Update</span> Builder</div>
+  <div class="logo">Weekly Update Builder</div>
   <div class="header-right">
+    <select id="templateSelect" class="template-select" title="Report template">
+      <option value="cs">CS Weekly</option>
+      <option value="operations">Operations</option>
+    </select>
+    <button type="button" class="btn-icon" id="darkModeToggle" onclick="toggleDarkMode()" title="Toggle dark mode">🌙</button>
     <span class="save-status" id="saveStatus"></span>
     <div class="week-badge" id="weekBadge">Loading...</div>
   </div>
@@ -20,13 +30,34 @@
 <!-- SIDEBAR -->
 <div class="history-pane">
   <div class="history-label">History</div>
-  <button class="btn-new-week" onclick="startNewWeek()">+ New Week</button>
+  <button type="button" class="btn-new-week" onclick="startNewWeek()">+ New Week</button>
+  <button type="button" class="btn-copy-last" id="copyLastWeekBtn" onclick="copyFromLastWeek()" style="display:none">📋 Copy from last week</button>
   <div id="historyList"></div>
 
   <div class="sparkline-wrap" id="sparkWrap" style="display:none">
     <div class="sparkline-title">Conversations / Week</div>
     <svg class="sparkline-chart" id="sparkSvg" viewBox="0 0 160 48" preserveAspectRatio="none"></svg>
     <div class="sparkline-labels" id="sparkLabels"></div>
+  </div>
+
+  <!-- How to Use -->
+  <div class="how-to-wrap">
+    <button type="button" class="how-to-toggle" id="howToToggle" onclick="toggleHowTo()" aria-expanded="false">
+      <span class="how-to-toggle-icon">?</span> How to Use
+    </button>
+    <div class="how-to-content" id="howToContent">
+      <ol>
+        <li><strong>Report Period</strong> — Enter team name and date range.</li>
+        <li><strong>CS Router Metrics</strong> — Add metric period, total conversations (vs last week shown), median response time, and goal.</li>
+        <li><strong>Meetings</strong> — Add or remove meetings. Use "Copy from last week" to duplicate.</li>
+        <li><strong>Accomplishments</strong> — Check recurring items or add custom ones. Use → to carry items to next week.</li>
+        <li><strong>Notes for Next Week</strong> — Parking lot items that carry forward automatically.</li>
+        <li><strong>Front Office Sync</strong> — Meeting title and agenda items.</li>
+        <li><strong>Preview</strong> — Print, copy plain, or Slack. Ctrl+Enter copies Slack, Ctrl+Shift+C copies plain.</li>
+        <li><strong>Templates</strong> — Switch between CS Weekly and Operations presets.</li>
+        <li><strong>Export/Import</strong> — Backup or restore your data as JSON.</li>
+      </ol>
+    </div>
   </div>
 </div>
 
@@ -86,6 +117,11 @@
   </div>
 
   <div class="card">
+    <div class="card-title"><span class="dot" style="background:var(--accent2)"></span> Notes for Next Week</div>
+    <textarea id="notesForNextWeek" class="notes-area" placeholder="Follow-up items that carry forward to next week's report..."></textarea>
+  </div>
+
+  <div class="card">
     <div class="card-title"><span class="dot" style="background:var(--muted)"></span> Private Notes</div>
     <textarea id="privateNotes" class="notes-area" placeholder="Context for yourself — not included in the report. (e.g. 'spike on Tuesday due to outage', 'follow up with Ashley on X')"></textarea>
   </div>
@@ -97,17 +133,26 @@
   <div class="preview-header">
     <span class="pane-label">Live Preview</span>
     <div class="preview-actions">
-      <button class="btn-reset" onclick="resetWeek()">Reset</button>
-      <button class="btn-slack" id="slackBtn" onclick="copySlack()">⧓ Copy for Slack</button>
-      <button class="btn-copy" id="copyBtn" onclick="copyPlain()">⎘ Copy Plain</button>
+      <button type="button" class="btn-reset" onclick="resetWeek()">Reset</button>
+      <button type="button" class="btn-print" onclick="printReport()">🖨 Print</button>
+      <button type="button" class="btn-slack" id="slackBtn" onclick="copySlack()">⧓ Copy for Slack</button>
+      <button type="button" class="btn-copy" id="copyBtn" onclick="copyPlain()">⎘ Copy Plain</button>
     </div>
   </div>
   <div class="preview-box" id="previewBox">Start filling in the form to see your report...</div>
   <div class="preview-footer">
     <div class="char-count" id="charCount"></div>
-    <div style="font-size:10px; color: var(--muted)">⧓ = Slack bold formatting &nbsp;|&nbsp; ⎘ = plain text</div>
+    <div class="footer-actions">
+      <button type="button" class="btn-link" onclick="exportData()">Export data</button>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+      <button type="button" class="btn-link" onclick="document.getElementById('importFile').click()">Import</button>
+      <span style="font-size:10px; color: var(--muted)">⧓ Slack &nbsp;|&nbsp; ⎘ Plain</span>
+    </div>
   </div>
 </div>
+
+<!-- Hidden print container -->
+<div id="printContainer" class="print-container"></div>
 
 <script src="app.js"></script>
 </body>

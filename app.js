@@ -1,5 +1,5 @@
 // ── Constants ──────────────────────────────────────────────────────────────
-const PRESETS = [
+const PRESETS_CS = [
   "Tech CS Monitoring",
   "Trust Pilot Review monitoring",
   "Weekly 1on1 meetings with the CS and Routers",
@@ -10,12 +10,28 @@ const PRESETS = [
   "Auditing Knowledge base and Macros for duplicate or outdated information"
 ];
 
-const DEF_MEETINGS = [
+const PRESETS_OPERATIONS = [
+  "Daily operations review",
+  "Process improvements implemented",
+  "Team coordination and scheduling",
+  "Issue resolution and escalations",
+  "Documentation updates",
+  "Training and onboarding",
+  "Cross-team collaboration"
+];
+
+const DEF_MEETINGS_CS = [
   "1:1 with Shift Supervisors, Front and Back Office Team Leads, CCOO",
   "CS Team Meeting, CS Operations Sync"
 ];
 
-const DEF_SYNC = [
+const DEF_MEETINGS_OPERATIONS = [
+  "Operations standup",
+  "Team sync",
+  "Leadership update"
+];
+
+const DEF_SYNC_CS = [
   "Incarcerated Patients Protocol",
   "New HRT Patients seeing that labs are still included",
   "Addressing HRT sign-up timeframe and labs",
@@ -27,7 +43,13 @@ const DEF_SYNC = [
   "Medical Critical Escalations when Shift Supervisors are OOO (During after hour shifts)"
 ];
 
-const LS_KEY = 'fountain_report_v2';
+const DEF_SYNC_OPERATIONS = [
+  "Upcoming initiatives",
+  "Resource allocation",
+  "Blockers and risks"
+];
+
+const LS_KEY = 'fountain_report_v3';
 const SLACK_CHAR_LIMIT = 4000;
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -36,7 +58,13 @@ let meetings = [];
 let bullets = [];       // { text, carryForward }
 let syncItems = [];
 let presetChecks = {};
+let notesForNextWeek = '';
+let activeTemplate = 'cs';
 let saveTimer = null, statusTimer = null;
+
+function getPresets() { return activeTemplate === 'operations' ? PRESETS_OPERATIONS : PRESETS_CS; }
+function getDefMeetings() { return activeTemplate === 'operations' ? DEF_MEETINGS_OPERATIONS : DEF_MEETINGS_CS; }
+function getDefSync() { return activeTemplate === 'operations' ? DEF_SYNC_OPERATIONS : DEF_SYNC_CS; }
 
 // ── Week helpers ───────────────────────────────────────────────────────────
 function weekId(d) {
@@ -72,10 +100,20 @@ function saveStore(data) { try { localStorage.setItem(LS_KEY, JSON.stringify(dat
 
 // ── Init ───────────────────────────────────────────────────────────────────
 function init() {
+  activeTemplate = localStorage.getItem('ss_report_template') || 'cs';
+  const sel = document.getElementById('templateSelect');
+  if (sel) sel.value = activeTemplate;
+
+  const dark = localStorage.getItem('ss_report_dark') === '1';
+  if (dark) document.body.classList.add('dark');
+  updateDarkModeIcon();
+
   activeWeekId = weekId();
   const dates = weekDates();
   document.getElementById('weekBadge').textContent = 'Week of ' + dates.label;
   loadWeek(activeWeekId);
+  showReminderBanner();
+  setupKeyboardShortcuts();
 }
 
 // ── Load / Save ────────────────────────────────────────────────────────────
@@ -94,12 +132,15 @@ function loadWeek(wid) {
     setF('responseGoal', saved.responseGoal || '2 minutes 30 seconds');
     setF('syncMeeting', saved.syncMeeting || '');
     setF('privateNotes', saved.privateNotes || '');
-    meetings = [...(saved.meetings || DEF_MEETINGS)];
+    setF('notesForNextWeek', saved.notesForNextWeek || '');
+    meetings = [...(saved.meetings || getDefMeetings())];
     bullets = (saved.bullets || ['']).map(b => typeof b === 'string' ? {text:b, carryForward:false} : b);
-    syncItems = [...(saved.syncItems || DEF_SYNC)];
+    syncItems = [...(saved.syncItems || getDefSync())];
     presetChecks = {...(saved.presetChecks || {})};
+    notesForNextWeek = saved.notesForNextWeek || '';
   } else {
     const carryBullets = getCarryForwardBullets(wid, store);
+    const carryNotes = getCarryForwardNotes(wid, store);
 
     setF('teamName', 'CS/Refills and Clarifications/RN/Shift Supervisor');
     setF('dateRange', wid === weekId() ? dates.short : weekLabel(wid));
@@ -107,13 +148,17 @@ function loadWeek(wid) {
     setF('totalConversations', '');
     setF('medianResponseTime', '');
     setF('responseGoal', '2 minutes 30 seconds');
-    setF('syncMeeting', 'Front Office Sync Monthly Meeting on [DATE] to review the following:');
+    setF('syncMeeting', activeTemplate === 'operations' ? 'Upcoming topics:' : 'Front Office Sync Monthly Meeting on [DATE] to review the following:');
     setF('privateNotes', '');
-    meetings = [...DEF_MEETINGS];
+    setF('notesForNextWeek', carryNotes);
+    meetings = [...getDefMeetings()];
     bullets = carryBullets.length > 0 ? carryBullets : [{text:'', carryForward:false}];
-    syncItems = [...DEF_SYNC];
+    syncItems = [...getDefSync()];
     presetChecks = {};
+    notesForNextWeek = carryNotes;
   }
+
+  updateCopyLastWeekVisibility();
 
   renderAll();
   renderHistory();
@@ -132,15 +177,24 @@ function getCarryForwardBullets(currentWid, store) {
     .map(b => ({text: b.text, carryForward: false}));
 }
 
+function getCarryForwardNotes(currentWid, store) {
+  const sortedOrder = [...store.order].sort((a,b) => b.localeCompare(a));
+  const prevWid = sortedOrder.find(wid => wid < currentWid);
+  if (!prevWid) return '';
+  const prevData = store.weeks[prevWid];
+  return (prevData && prevData.notesForNextWeek) ? prevData.notesForNextWeek : '';
+}
+
 function saveWeek() {
   const store = getStore();
   const wid = activeWeekId;
+  notesForNextWeek = getF('notesForNextWeek');
   store.weeks[wid] = {
     teamName: getF('teamName'), dateRange: getF('dateRange'),
     metricPeriod: getF('metricPeriod'), totalConversations: getF('totalConversations'),
     medianResponseTime: getF('medianResponseTime'), responseGoal: getF('responseGoal'),
     syncMeeting: getF('syncMeeting'), privateNotes: getF('privateNotes'),
-    meetings: [...meetings], bullets: bullets.map(b => ({...b})),
+    notesForNextWeek, meetings: [...meetings], bullets: bullets.map(b => ({...b})),
     syncItems: [...syncItems], presetChecks: {...presetChecks},
     savedAt: new Date().toISOString()
   };
@@ -187,14 +241,14 @@ function renderSparkline() {
   svg.innerHTML = `
     <defs>
       <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#7c6aff" stop-opacity="0.35"/>
-        <stop offset="100%" stop-color="#7c6aff" stop-opacity="0"/>
+        <stop offset="0%" stop-color="#2563eb" stop-opacity="0.3"/>
+        <stop offset="100%" stop-color="#2563eb" stop-opacity="0"/>
       </linearGradient>
     </defs>
     <polygon points="${fillPts}" fill="url(#sg)"/>
-    <polyline points="${polyline}" fill="none" stroke="#7c6aff" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+    <polyline points="${polyline}" fill="none" stroke="#2563eb" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
     ${dataPoints.map((d, i) => `
-      <circle cx="${xs[i]}" cy="${ys[i]}" r="2.5" fill="${d.wid === activeWeekId ? '#4adeaa' : '#7c6aff'}"/>
+      <circle cx="${xs[i]}" cy="${ys[i]}" r="2.5" fill="${d.wid === activeWeekId ? '#0ea5e9' : '#2563eb'}"/>
     `).join('')}
   `;
 
@@ -238,7 +292,8 @@ function renderAll() {
 
 function renderPresets() {
   const g = document.getElementById('presetsGrid'); g.innerHTML = '';
-  PRESETS.forEach((p, i) => {
+  const presets = getPresets();
+  presets.forEach((p, i) => {
     if (presetChecks[i] === undefined) presetChecks[i] = false;
     const row = document.createElement('label');
     row.className = 'preset-row';
@@ -288,11 +343,20 @@ function renderSyncItems() {
 function addSyncItem() { syncItems.push(''); renderSyncItems(); update(); }
 
 function bindInputs() {
-  ['teamName','dateRange','metricPeriod','totalConversations','medianResponseTime','responseGoal','syncMeeting','privateNotes']
+  ['teamName','dateRange','metricPeriod','totalConversations','medianResponseTime','responseGoal','syncMeeting','privateNotes','notesForNextWeek']
     .forEach(id => {
       const el = document.getElementById(id);
       if (el) el.oninput = () => { debounce(); update(); };
     });
+
+  const templateSel = document.getElementById('templateSelect');
+  if (templateSel) templateSel.onchange = () => {
+    activeTemplate = templateSel.value;
+    localStorage.setItem('ss_report_template', activeTemplate);
+    presetChecks = {};
+    renderPresets();
+    update();
+  };
 }
 
 // ── Goal indicator ─────────────────────────────────────────────────────────
@@ -317,14 +381,14 @@ function updateGoalIndicator() {
 
   const pct = medianSec / goalSec;
   let color, label;
-  if (pct <= 0.85)      { color = '#4adeaa'; label = '● Under goal'; }
-  else if (pct <= 1.0)  { color = '#ffb347'; label = '● Near goal'; }
-  else                  { color = '#ff6b6b'; label = '● Over goal'; }
+  if (pct <= 0.85)      { color = '#059669'; label = '● Under goal'; }
+  else if (pct <= 1.0)  { color = '#d97706'; label = '● Near goal'; }
+  else                  { color = '#dc2626'; label = '● Over goal'; }
 
   el.innerHTML = `<span style="color:${color};font-size:10px">${label} (goal: ${goalStr})</span>`;
 }
 
-// ── Last week metric hint ──────────────────────────────────────────────────
+// ── Last week metric hint + comparison ─────────────────────────────────────
 function updateMetricHints() {
   const store = getStore();
   const sorted = [...store.order].sort((a,b) => b.localeCompare(a));
@@ -335,14 +399,48 @@ function updateMetricHints() {
     const prev = store.weeks[prevWid];
     const parts = prevWid.split('~');
     const label = parts[0] || prevWid;
-    if (prev.totalConversations) {
-      convHint.textContent = `Last week (${label}): ${Number(prev.totalConversations).toLocaleString()}`;
-    } else {
-      convHint.textContent = '';
+    const prevVal = parseInt(prev.totalConversations || '0', 10);
+    const currVal = parseInt(getF('totalConversations') || '0', 10);
+
+    let html = `Last week (${label}): ${prevVal > 0 ? Number(prevVal).toLocaleString() : '—'}`;
+    if (prevVal > 0 && currVal > 0 && prevVal !== currVal) {
+      const pct = Math.round(((currVal - prevVal) / prevVal) * 100);
+      const cls = pct > 0 ? 'up' : (pct < 0 ? 'down' : 'same');
+      const arrow = pct > 0 ? '↑' : '↓';
+      html += ` <span class="metric-comparison ${cls}">(${arrow} ${Math.abs(pct)}%)</span>`;
     }
+    convHint.innerHTML = html;
   } else {
     convHint.textContent = '';
   }
+}
+
+function updateCopyLastWeekVisibility() {
+  const store = getStore();
+  const sorted = [...store.order].sort((a,b) => b.localeCompare(a));
+  const prevWid = sorted.find(wid => wid < activeWeekId);
+  const btn = document.getElementById('copyLastWeekBtn');
+  if (btn) btn.style.display = prevWid ? 'block' : 'none';
+}
+
+function copyFromLastWeek() {
+  const store = getStore();
+  const sorted = [...store.order].sort((a,b) => b.localeCompare(a));
+  const prevWid = sorted.find(wid => wid < activeWeekId);
+  if (!prevWid || !store.weeks[prevWid]) return;
+  const prev = store.weeks[prevWid];
+
+  meetings = [...(prev.meetings || [])];
+  bullets = (prev.bullets || []).map(b => typeof b === 'string' ? {text:b, carryForward:false} : {...b});
+  syncItems = [...(prev.syncItems || [])];
+  presetChecks = {...(prev.presetChecks || {})};
+  setF('notesForNextWeek', prev.notesForNextWeek || '');
+  notesForNextWeek = prev.notesForNextWeek || '';
+
+  renderAll();
+  debounce();
+  update();
+  showSaved();
 }
 
 // ── Generate report ────────────────────────────────────────────────────────
@@ -362,8 +460,13 @@ function generatePlain() {
 
   meetings.filter(m=>m.trim()).forEach(m => out += `${m}\n`);
 
-  [...PRESETS.filter((_,i)=>presetChecks[i]), ...bullets.filter(b=>b.text.trim()).map(b=>b.text)]
+  [...getPresets().filter((_,i)=>presetChecks[i]), ...bullets.filter(b=>b.text.trim()).map(b=>b.text)]
     .forEach(b => out += `• ${b}\n`);
+
+  const notesNext = getF('notesForNextWeek').trim();
+  if (notesNext) {
+    out += `\nNotes for Next Week:\n${notesNext}\n`;
+  }
 
   const syncMtg = getF('syncMeeting').trim();
   const sItems = syncItems.filter(s=>s.trim());
@@ -394,10 +497,15 @@ function generateSlack() {
     mtgs.forEach(m => out += `${m}\n`);
   }
 
-  const allBullets = [...PRESETS.filter((_,i)=>presetChecks[i]), ...bullets.filter(b=>b.text.trim()).map(b=>b.text)];
+  const allBullets = [...getPresets().filter((_,i)=>presetChecks[i]), ...bullets.filter(b=>b.text.trim()).map(b=>b.text)];
   if (allBullets.length) {
     out += '\n';
     allBullets.forEach(b => out += `• ${b}\n`);
+  }
+
+  const notesNext = getF('notesForNextWeek').trim();
+  if (notesNext) {
+    out += `\n*Notes for Next Week:*\n${notesNext}\n`;
   }
 
   const syncMtg = getF('syncMeeting').trim();
@@ -424,6 +532,7 @@ function update() {
 
   updateGoalIndicator();
   updateMetricHints();
+  showReminderBanner();
 }
 
 // ── Copy ───────────────────────────────────────────────────────────────────
@@ -466,11 +575,11 @@ function resetWeek() {
 // ── Save status ────────────────────────────────────────────────────────────
 function setSaveStatus() {
   const el = document.getElementById('saveStatus');
-  el.style.color = '#ffb347'; el.textContent = '● Saving…';
+  el.style.color = '#d97706'; el.textContent = '● Saving…';
 }
 function showSaved() {
   const el = document.getElementById('saveStatus');
-  el.style.color = '#4adeaa'; el.textContent = '✓ Saved';
+  el.style.color = '#059669'; el.textContent = '✓ Saved';
   clearTimeout(statusTimer);
   statusTimer = setTimeout(() => { el.textContent = ''; }, 3000);
 }
@@ -479,5 +588,116 @@ function showSaved() {
 function getF(id) { return (document.getElementById(id)||{}).value || ''; }
 function setF(id, val) { const el = document.getElementById(id); if(el) el.value = val; }
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── How to Use toggle ─────────────────────────────────────────────────────
+function toggleHowTo() {
+  const btn = document.getElementById('howToToggle');
+  const content = document.getElementById('howToContent');
+  const isOpen = content.classList.toggle('is-open');
+  btn.setAttribute('aria-expanded', isOpen);
+}
+
+// ── Print ─────────────────────────────────────────────────────────────────
+function printReport() {
+  const text = generatePlain();
+  const container = document.getElementById('printContainer');
+  if (!container) return;
+  container.textContent = text || 'No content to print.';
+  container.style.display = 'block';
+  window.print();
+  container.style.display = 'none';
+}
+
+// ── Export / Import ───────────────────────────────────────────────────────
+function exportData() {
+  const store = getStore();
+  const blob = new Blob([JSON.stringify(store, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `ss-report-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function importData(ev) {
+  const file = ev.target.files?.[0];
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const data = JSON.parse(r.result);
+      if (data.weeks && Array.isArray(data.order)) {
+        saveStore(data);
+        loadWeek(activeWeekId);
+        showSaved();
+        alert('Data imported successfully.');
+      } else {
+        alert('Invalid backup file format.');
+      }
+    } catch (e) {
+      alert('Could not parse file. ' + e.message);
+    }
+  };
+  r.readAsText(file);
+  ev.target.value = '';
+}
+
+// ── Dark mode ─────────────────────────────────────────────────────────────
+function toggleDarkMode() {
+  document.body.classList.toggle('dark');
+  const isDark = document.body.classList.contains('dark');
+  localStorage.setItem('ss_report_dark', isDark ? '1' : '0');
+  updateDarkModeIcon();
+}
+
+function updateDarkModeIcon() {
+  const btn = document.getElementById('darkModeToggle');
+  if (!btn) return;
+  btn.textContent = document.body.classList.contains('dark') ? '☀️' : '🌙';
+  btn.title = document.body.classList.contains('dark') ? 'Switch to light mode' : 'Switch to dark mode';
+}
+
+// ── Week-end reminder ─────────────────────────────────────────────────────
+function showReminderBanner() {
+  const banner = document.getElementById('reminderBanner');
+  const textEl = document.getElementById('reminderText');
+  if (!banner || !textEl) return;
+
+  const now = new Date();
+  const day = now.getDay();
+  const fri = day === 5;
+  const satSun = day === 0 || day === 6;
+  const hasMetrics = parseInt(getF('totalConversations') || '0', 10) > 0;
+
+  if (fri && !hasMetrics) {
+    banner.style.display = 'block';
+    textEl.textContent = '📋 Report due today — fill in your metrics and accomplishments.';
+  } else if (fri) {
+    banner.style.display = 'block';
+    textEl.textContent = '📋 Report due today — don\'t forget to copy and submit.';
+  } else if (day === 4) {
+    banner.style.display = 'block';
+    textEl.textContent = '📋 Report due tomorrow (Friday).';
+  } else if (!satSun) {
+    const daysToFri = (5 - day + 7) % 7;
+    banner.style.display = 'block';
+    textEl.textContent = `📋 Report due in ${daysToFri} day${daysToFri === 1 ? '' : 's'} (Friday).`;
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────
+function setupKeyboardShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'Enter') {
+      e.preventDefault();
+      copySlack();
+    } else if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'c') {
+      e.preventDefault();
+      copyPlain();
+    }
+  });
+}
 
 init();
