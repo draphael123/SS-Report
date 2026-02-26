@@ -33,6 +33,46 @@
   </div>
 </div>
 
+<!-- Template management modal -->
+<div id="templateModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="templateModalTitle" aria-hidden="true">
+  <div class="modal-content modal-large">
+    <div class="modal-header">
+      <h2 id="templateModalTitle">Manage Templates</h2>
+      <button type="button" class="btn-modal-close" onclick="closeTemplateModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="template-modal-body">
+      <div class="template-list-section">
+        <h3>Custom Templates</h3>
+        <div id="customTemplatesList" class="custom-templates-list"></div>
+        <button type="button" class="btn-add" onclick="showNewTemplateForm()">+ New Template</button>
+      </div>
+      <div id="templateFormSection" class="template-form-section" style="display:none">
+        <h3 id="templateFormTitle">New Template</h3>
+        <div class="field">
+          <label class="lbl" for="templateName">Template Name</label>
+          <input type="text" id="templateName" placeholder="My Custom Template">
+        </div>
+        <div class="field">
+          <label class="lbl" for="templatePresets">Recurring Items (one per line)</label>
+          <textarea id="templatePresets" class="template-textarea" placeholder="Item 1&#10;Item 2&#10;Item 3"></textarea>
+        </div>
+        <div class="field">
+          <label class="lbl" for="templateMeetings">Default Meetings (one per line)</label>
+          <textarea id="templateMeetings" class="template-textarea" placeholder="Meeting 1&#10;Meeting 2"></textarea>
+        </div>
+        <div class="field">
+          <label class="lbl" for="templateSyncItems">Default Agenda Items (one per line)</label>
+          <textarea id="templateSyncItems" class="template-textarea" placeholder="Agenda item 1&#10;Agenda item 2"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-modal btn-secondary" onclick="cancelTemplateForm()">Cancel</button>
+          <button type="button" class="btn-modal btn-primary" onclick="saveTemplate()">Save Template</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Week-end reminder banner -->
 <div class="reminder-banner" id="reminderBanner" role="alert" aria-hidden="true" style="display:none">
   <span id="reminderText"></span>
@@ -58,6 +98,7 @@
       <option value="cs">CS Weekly</option>
       <option value="operations">Operations</option>
     </select>
+    <button type="button" class="btn-icon btn-template-manage" onclick="openTemplateModal()" title="Manage templates" aria-label="Manage templates">&#9881;</button>
     <button type="button" class="btn-icon btn-google" id="googleSignInBtn" onclick="toggleFirebaseAuth()" title="Sign in with Google to sync" aria-label="Sign in with Google">Sign in</button>
     <div id="authUserWrap" class="auth-user-wrap" style="display:none" aria-live="polite">
       <span id="authUserLabel" class="auth-user-label"></span>
@@ -184,6 +225,12 @@
     <div class="card-title"><span class="dot" style="background:var(--accent2)" aria-hidden="true"></span> Notes for Next Week</div>
     <label for="notesForNextWeek" class="visually-hidden">Notes for next week</label>
     <textarea id="notesForNextWeek" class="notes-area" placeholder="Follow-up items that carry forward to next week's report..."></textarea>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="dot" style="background:var(--info)" aria-hidden="true"></span> Internal Comments</div>
+    <label for="internalComments" class="visually-hidden">Internal team comments</label>
+    <textarea id="internalComments" class="notes-area" placeholder="Shared team comments - visible to all signed-in users but not included in the report..."></textarea>
   </div>
 
   <div class="card">

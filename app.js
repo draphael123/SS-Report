@@ -1202,6 +1202,227 @@ function saveCustomTemplates() {
   }
 }
 
+// ── Template Management UI ───────────────────────────────────────────────────
+
+let editingTemplateId = null;
+
+/**
+ * Open the template management modal
+ */
+function openTemplateModal() {
+  const modal = document.getElementById('templateModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+    renderCustomTemplatesList();
+    hideTemplateForm();
+  }
+}
+
+/**
+ * Close the template management modal
+ */
+function closeTemplateModal() {
+  const modal = document.getElementById('templateModal');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+  }
+  editingTemplateId = null;
+}
+
+/**
+ * Render the list of custom templates in the modal
+ */
+function renderCustomTemplatesList() {
+  const list = document.getElementById('customTemplatesList');
+  if (!list) return;
+
+  if (AppState.customTemplates.length === 0) {
+    list.innerHTML = '<p class="empty-state">No custom templates yet. Click "+ New Template" to create one.</p>';
+    return;
+  }
+
+  list.innerHTML = '';
+  AppState.customTemplates.forEach(template => {
+    const item = document.createElement('div');
+    item.className = 'template-list-item';
+
+    const info = document.createElement('div');
+    info.className = 'template-list-info';
+
+    const name = document.createElement('div');
+    name.className = 'template-list-name';
+    name.textContent = template.name;
+
+    const meta = document.createElement('div');
+    meta.className = 'template-list-meta';
+    meta.textContent = `${template.presets.length} recurring items, ${template.defaultMeetings.length} meetings`;
+
+    info.appendChild(name);
+    info.appendChild(meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'template-list-actions';
+
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'btn-template-action';
+    editBtn.textContent = 'Edit';
+    editBtn.onclick = () => editTemplate(template.id);
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'btn-template-action btn-danger';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.onclick = () => deleteTemplate(template.id);
+
+    actions.appendChild(editBtn);
+    actions.appendChild(deleteBtn);
+
+    item.appendChild(info);
+    item.appendChild(actions);
+    list.appendChild(item);
+  });
+}
+
+/**
+ * Show the new template form
+ */
+function showNewTemplateForm() {
+  editingTemplateId = null;
+  const formSection = document.getElementById('templateFormSection');
+  const formTitle = document.getElementById('templateFormTitle');
+  if (formSection) formSection.style.display = 'block';
+  if (formTitle) formTitle.textContent = 'New Template';
+
+  // Clear form
+  setF('templateName', '');
+  setF('templatePresets', '');
+  setF('templateMeetings', '');
+  setF('templateSyncItems', '');
+}
+
+/**
+ * Hide the template form
+ */
+function hideTemplateForm() {
+  const formSection = document.getElementById('templateFormSection');
+  if (formSection) formSection.style.display = 'none';
+  editingTemplateId = null;
+}
+
+/**
+ * Cancel template form editing
+ */
+function cancelTemplateForm() {
+  hideTemplateForm();
+}
+
+/**
+ * Edit an existing template
+ * @param {string} templateId
+ */
+function editTemplate(templateId) {
+  const template = AppState.customTemplates.find(t => t.id === templateId);
+  if (!template) return;
+
+  editingTemplateId = templateId;
+  const formSection = document.getElementById('templateFormSection');
+  const formTitle = document.getElementById('templateFormTitle');
+  if (formSection) formSection.style.display = 'block';
+  if (formTitle) formTitle.textContent = 'Edit Template';
+
+  setF('templateName', template.name);
+  setF('templatePresets', template.presets.join('\n'));
+  setF('templateMeetings', template.defaultMeetings.join('\n'));
+  setF('templateSyncItems', template.defaultSync.join('\n'));
+}
+
+/**
+ * Delete a custom template
+ * @param {string} templateId
+ */
+function deleteTemplate(templateId) {
+  if (!confirm('Are you sure you want to delete this template?')) return;
+
+  AppState.customTemplates = AppState.customTemplates.filter(t => t.id !== templateId);
+  saveCustomTemplates();
+  renderCustomTemplatesList();
+  populateTemplateSelect();
+
+  // If the deleted template was active, switch to default
+  if (AppState.activeTemplate === templateId) {
+    AppState.activeTemplate = 'cs';
+    const sel = document.getElementById('templateSelect');
+    if (sel) sel.value = 'cs';
+    localStorage.setItem('ss_report_template', 'cs');
+  }
+
+  showToast('Template deleted', 'success');
+}
+
+/**
+ * Save the template from the form
+ */
+function saveTemplate() {
+  const name = getF('templateName').trim();
+  if (!name) {
+    showToast('Please enter a template name', 'error');
+    return;
+  }
+
+  const presets = getF('templatePresets')
+    .split('\n')
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+
+  const meetings = getF('templateMeetings')
+    .split('\n')
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+
+  const syncItems = getF('templateSyncItems')
+    .split('\n')
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+
+  if (editingTemplateId) {
+    // Update existing template
+    const template = AppState.customTemplates.find(t => t.id === editingTemplateId);
+    if (template) {
+      template.name = name;
+      template.presets = presets;
+      template.defaultMeetings = meetings;
+      template.defaultSync = syncItems;
+    }
+    showToast('Template updated', 'success');
+  } else {
+    // Create new template
+    const newTemplate = {
+      id: 'custom-' + Date.now(),
+      name: name,
+      presets: presets,
+      defaultMeetings: meetings,
+      defaultSync: syncItems
+    };
+    AppState.customTemplates.push(newTemplate);
+    showToast('Template created', 'success');
+  }
+
+  saveCustomTemplates();
+  populateTemplateSelect();
+  renderCustomTemplatesList();
+  hideTemplateForm();
+}
+
+// Expose template functions to window
+window.openTemplateModal = openTemplateModal;
+window.closeTemplateModal = closeTemplateModal;
+window.showNewTemplateForm = showNewTemplateForm;
+window.cancelTemplateForm = cancelTemplateForm;
+window.saveTemplate = saveTemplate;
+
 // ── Toast Notification System ────────────────────────────────────────────────
 
 /**
@@ -1522,6 +1743,7 @@ function loadWeek(wid) {
     setF('responseGoal', sanitize(saved.responseGoal) || '2 minutes 30 seconds');
     setF('syncMeeting', sanitize(saved.syncMeeting) || '');
     setF('privateNotes', sanitize(saved.privateNotes) || '');
+    setF('internalComments', sanitize(saved.internalComments) || '');
     setF('notesForNextWeek', sanitize(saved.notesForNextWeek) || '');
     AppState.meetings = (saved.meetings || getDefMeetings()).map(migrateMeeting);
     AppState.bullets = (saved.bullets || [{ text: '', carryForward: false, addedBy: null, addedAt: null }]).map(migrateBullet);
@@ -1544,6 +1766,7 @@ function loadWeek(wid) {
       ? 'Upcoming topics:'
       : 'Front Office Sync Monthly Meeting on [DATE] to review the following:');
     setF('privateNotes', '');
+    setF('internalComments', '');
     setF('notesForNextWeek', carryNotes);
     AppState.meetings = getDefMeetings().map(migrateMeeting);
     AppState.bullets = carryBullets.length > 0 ? carryBullets : [{ id: generateId(), text: '', carryForward: false, addedBy: null, addedAt: null }];
@@ -1625,6 +1848,7 @@ function saveWeek() {
     responseGoal: getF('responseGoal'),
     syncMeeting: getF('syncMeeting'),
     privateNotes: getF('privateNotes'),
+    internalComments: getF('internalComments'),
     notesForNextWeek: AppState.notesForNextWeek,
     meetings: AppState.meetings.map(m => ({ ...m })),
     bullets: AppState.bullets.map(b => ({ ...b })),
@@ -2307,7 +2531,7 @@ function addSyncItem() {
 function bindInputs() {
   const fields = [
     'teamName', 'dateRange', 'metricPeriod', 'totalConversations',
-    'medianResponseTime', 'responseGoal', 'syncMeeting', 'privateNotes', 'notesForNextWeek'
+    'medianResponseTime', 'responseGoal', 'syncMeeting', 'privateNotes', 'notesForNextWeek', 'internalComments'
   ];
 
   fields.forEach(id => {
@@ -2380,7 +2604,7 @@ function updateFieldEditLabel(fieldId) {
 function renderFieldEdits() {
   const fields = [
     'teamName', 'dateRange', 'metricPeriod', 'totalConversations',
-    'medianResponseTime', 'responseGoal', 'syncMeeting', 'privateNotes', 'notesForNextWeek'
+    'medianResponseTime', 'responseGoal', 'syncMeeting', 'privateNotes', 'notesForNextWeek', 'internalComments'
   ];
 
   fields.forEach(id => {
