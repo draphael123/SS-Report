@@ -1171,6 +1171,33 @@ input[type="number"] { -moz-appearance: textfield; }
   box-shadow: var(--shadow-md), var(--shadow-glow);
 }
 
+/* Google Sign-In & auth user */
+.btn-google {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+}
+.btn-google:hover {
+  transform: none;
+}
+.auth-user-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.auth-user-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.btn-signout {
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
 /* Copy from last week */
 .btn-copy-last {
   width: 100%;

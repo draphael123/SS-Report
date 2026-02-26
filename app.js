@@ -114,6 +114,9 @@ const DEBOUNCE_DELAY = 700;
 const TOAST_DURATION = 3000;
 const STATUS_CLEAR_DELAY = 3000;
 
+// Firestore in-memory store when signed in (real-time synced)
+let firestoreStoreCache = null;
+
 // ── Application State ────────────────────────────────────────────────────────
 
 const AppState = {
@@ -436,10 +439,13 @@ function migrateData(data) {
 // ── Storage ──────────────────────────────────────────────────────────────────
 
 /**
- * Get store from localStorage with migration
+ * Get store: from Firestore cache when signed in, else localStorage (with migration)
  * @returns {StoreData}
  */
 function getStore() {
+  if (window.firebaseAuth && window.firebaseAuth.isSignedIn() && firestoreStoreCache) {
+    return migrateData({ ...firestoreStoreCache, weeks: { ...firestoreStoreCache.weeks } });
+  }
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return { weeks: {}, order: [], version: CURRENT_DATA_VERSION };
@@ -454,7 +460,7 @@ function getStore() {
 }
 
 /**
- * Save store to localStorage
+ * Save store to localStorage and, when signed in, to Firestore
  * @param {StoreData} data
  * @returns {boolean} Success
  */
@@ -462,6 +468,9 @@ function saveStore(data) {
   try {
     data.version = CURRENT_DATA_VERSION;
     localStorage.setItem(LS_KEY, JSON.stringify(data));
+    if (window.firebaseAuth && window.firebaseAuth.isSignedIn()) {
+      window.firebaseAuth.saveStoreToFirestore(data);
+    }
     return true;
   } catch (e) {
     console.error('Failed to save store:', e);
@@ -473,6 +482,34 @@ function saveStore(data) {
     return false;
   }
 }
+
+/**
+ * Called by firebase.js when Firestore store doc is updated (real-time sync)
+ * @param {StoreData} store
+ */
+function onFirestoreStoreUpdated(store) {
+  if (!store || !AppState.activeWeekId) return;
+  loadWeek(AppState.activeWeekId);
+}
+
+/**
+ * Set in-memory Firestore store (called by firebase.js on snapshot)
+ * @param {StoreData} store
+ */
+function setFirestoreStore(store) {
+  firestoreStoreCache = store ? { weeks: store.weeks || {}, order: store.order || [], version: store.version || CURRENT_DATA_VERSION } : null;
+}
+
+/**
+ * Clear Firestore cache (called by firebase.js on sign-out)
+ */
+function clearFirestoreStore() {
+  firestoreStoreCache = null;
+}
+
+// Expose for firebase.js
+window.setFirestoreStore = setFirestoreStore;
+window.clearFirestoreStore = clearFirestoreStore;
 
 /**
  * Load custom templates from localStorage
@@ -772,6 +809,12 @@ function init() {
 
   // Listen for storage changes from other tabs
   window.addEventListener('storage', handleStorageChange);
+
+  // Firebase: init auth + real-time Firestore sync callback
+  if (window.firebaseAuth) {
+    window.firebaseAuth.init();
+    window.firebaseAuth.setOnStoreUpdatedCallback(onFirestoreStoreUpdated);
+  }
 
   // Initialize undo/redo
   clearHistory();

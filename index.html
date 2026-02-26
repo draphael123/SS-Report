@@ -8,6 +8,10 @@
   <title>Weekly Update Builder</title>
   <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
@@ -54,6 +58,11 @@
       <option value="cs">CS Weekly</option>
       <option value="operations">Operations</option>
     </select>
+    <button type="button" class="btn-icon btn-google" id="googleSignInBtn" onclick="toggleFirebaseAuth()" title="Sign in with Google to sync" aria-label="Sign in with Google">Sign in</button>
+    <div id="authUserWrap" class="auth-user-wrap" style="display:none" aria-live="polite">
+      <span id="authUserLabel" class="auth-user-label"></span>
+      <button type="button" class="btn-icon btn-signout" id="signOutBtn" onclick="firebaseSignOut()" title="Sign out" aria-label="Sign out">Sign out</button>
+    </div>
     <button type="button" class="btn-icon" id="darkModeToggle" onclick="toggleDarkMode()" title="Toggle dark mode" aria-label="Toggle dark mode">&#127769;</button>
     <span class="save-status" id="saveStatus" role="status" aria-live="polite"></span>
     <div class="week-badge" id="weekBadge" aria-label="Current week">Loading...</div>
@@ -202,6 +211,7 @@
 <!-- Hidden print container -->
 <div id="printContainer" class="print-container" aria-hidden="true"></div>
 
+<script src="firebase.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
