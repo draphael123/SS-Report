@@ -30,6 +30,12 @@
  */
 
 /**
+ * @typedef {Object} FieldEdit
+ * @property {string} editedBy - Display name of user who last edited this field
+ * @property {string} editedAt - ISO timestamp when field was last edited
+ */
+
+/**
  * @typedef {Object} WeekData
  * @property {string} teamName
  * @property {string} dateRange
@@ -44,6 +50,7 @@
  * @property {Bullet[]} bullets
  * @property {SyncItem[]} syncItems
  * @property {Object<number, boolean>} presetChecks
+ * @property {Object<string, FieldEdit>} fieldEdits - Track who edited each field
  * @property {string} savedAt
  */
 
@@ -145,6 +152,7 @@ const AppState = {
   syncItems: [],
   presetChecks: {},
   notesForNextWeek: '',
+  fieldEdits: {}, // Track who edited each field
   activeTemplate: 'cs',
   customTemplates: [],
   // Undo/Redo
@@ -1519,7 +1527,9 @@ function loadWeek(wid) {
     AppState.bullets = (saved.bullets || [{ text: '', carryForward: false, addedBy: null, addedAt: null }]).map(migrateBullet);
     AppState.syncItems = (saved.syncItems || getDefSync()).map(migrateSyncItem);
     AppState.presetChecks = { ...(saved.presetChecks || {}) };
+    AppState.fieldEdits = { ...(saved.fieldEdits || {}) };
     AppState.notesForNextWeek = sanitize(saved.notesForNextWeek) || '';
+    renderFieldEdits();
   } else {
     const carryBullets = getCarryForwardBullets(wid, store);
     const carryNotes = getCarryForwardNotes(wid, store);
@@ -1539,9 +1549,11 @@ function loadWeek(wid) {
     AppState.bullets = carryBullets.length > 0 ? carryBullets : [{ id: generateId(), text: '', carryForward: false, addedBy: null, addedAt: null }];
     AppState.syncItems = getDefSync().map(migrateSyncItem);
     AppState.presetChecks = {};
+    AppState.fieldEdits = {};
     AppState.notesForNextWeek = carryNotes;
   }
 
+  renderFieldEdits();
   updateCopyLastWeekVisibility();
   markAllDirty();
   renderAll();
@@ -1618,6 +1630,7 @@ function saveWeek() {
     bullets: AppState.bullets.map(b => ({ ...b })),
     syncItems: AppState.syncItems.map(s => ({ ...s })),
     presetChecks: { ...AppState.presetChecks },
+    fieldEdits: { ...AppState.fieldEdits },
     savedAt: new Date().toISOString()
   };
 
@@ -2301,6 +2314,15 @@ function bindInputs() {
     const el = document.getElementById(id);
     if (el) {
       el.oninput = () => {
+        // Track who edited this field
+        const userName = getCurrentUserDisplayName();
+        if (userName) {
+          AppState.fieldEdits[id] = {
+            editedBy: userName,
+            editedAt: new Date().toISOString()
+          };
+          updateFieldEditLabel(id);
+        }
         debounce();
         update();
       };
@@ -2317,6 +2339,60 @@ function bindInputs() {
       update();
     };
   }
+}
+
+/**
+ * Update field edit label for a specific field
+ * @param {string} fieldId
+ */
+function updateFieldEditLabel(fieldId) {
+  const el = document.getElementById(fieldId);
+  if (!el) return;
+
+  const edit = AppState.fieldEdits[fieldId];
+  if (!edit) return;
+
+  // Find wrapper - either .field or .card for textareas
+  let wrapper = el.closest('.field');
+  if (!wrapper) {
+    wrapper = el.closest('.card');
+  }
+  if (!wrapper) return;
+
+  let label = wrapper.querySelector(`.field-edit-label[data-field="${fieldId}"]`);
+  if (!label) {
+    label = document.createElement('div');
+    label.className = 'field-edit-label';
+    label.dataset.field = fieldId;
+    // Insert after the element
+    el.parentNode.insertBefore(label, el.nextSibling);
+  }
+
+  const userColor = stringToColor(edit.editedBy);
+  label.style.color = userColor;
+  label.textContent = `Edited by ${edit.editedBy}`;
+  label.title = formatAttributionDate(edit.editedAt) || '';
+}
+
+/**
+ * Render field edit labels for all fields
+ */
+function renderFieldEdits() {
+  const fields = [
+    'teamName', 'dateRange', 'metricPeriod', 'totalConversations',
+    'medianResponseTime', 'responseGoal', 'syncMeeting', 'privateNotes', 'notesForNextWeek'
+  ];
+
+  fields.forEach(id => {
+    const edit = AppState.fieldEdits[id];
+    if (edit) {
+      updateFieldEditLabel(id);
+    } else {
+      // Remove label if no edit info
+      const label = document.querySelector(`.field-edit-label[data-field="${id}"]`);
+      if (label) label.remove();
+    }
+  });
 }
 
 // ── Template Select Population ───────────────────────────────────────────────
