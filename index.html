@@ -63,6 +63,7 @@
       <span id="authUserLabel" class="auth-user-label"></span>
       <button type="button" class="btn-icon btn-signout" id="signOutBtn" onclick="firebaseSignOut()" title="Sign out" aria-label="Sign out">Sign out</button>
     </div>
+    <div id="presenceAvatars" class="presence-avatars" aria-label="Online users"></div>
     <button type="button" class="btn-icon" id="darkModeToggle" onclick="toggleDarkMode()" title="Toggle dark mode" aria-label="Toggle dark mode">&#127769;</button>
     <span class="save-status" id="saveStatus" role="status" aria-live="polite"></span>
     <div class="week-badge" id="weekBadge" aria-label="Current week">Loading...</div>
@@ -80,6 +81,14 @@
     <div class="sparkline-title">Conversations / Week</div>
     <svg class="sparkline-chart" id="sparkSvg" viewBox="0 0 160 48" preserveAspectRatio="none" role="img" aria-label="Sparkline chart showing conversation trends"></svg>
     <div class="sparkline-labels" id="sparkLabels"></div>
+  </div>
+
+  <!-- Activity Feed -->
+  <div class="activity-feed" id="activityFeed" style="display:none" aria-label="Recent activity">
+    <div class="activity-header">
+      <span class="activity-title">Activity</span>
+    </div>
+    <div id="activityList" class="activity-list"></div>
   </div>
 
   <!-- How to Use -->

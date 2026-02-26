@@ -6,8 +6,27 @@
 
 /**
  * @typedef {Object} Bullet
+ * @property {string} id - Unique identifier for this item
  * @property {string} text - The bullet text content
  * @property {boolean} carryForward - Whether to carry to next week
+ * @property {string|null} addedBy - Display name of user who added this item
+ * @property {string|null} addedAt - ISO timestamp when item was added
+ */
+
+/**
+ * @typedef {Object} Meeting
+ * @property {string} id - Unique identifier for this item
+ * @property {string} text - The meeting name
+ * @property {string|null} addedBy - Display name of user who added this item
+ * @property {string|null} addedAt - ISO timestamp when item was added
+ */
+
+/**
+ * @typedef {Object} SyncItem
+ * @property {string} id - Unique identifier for this item
+ * @property {string} text - The agenda item text
+ * @property {string|null} addedBy - Display name of user who added this item
+ * @property {string|null} addedAt - ISO timestamp when item was added
  */
 
 /**
@@ -21,9 +40,9 @@
  * @property {string} syncMeeting
  * @property {string} privateNotes
  * @property {string} notesForNextWeek
- * @property {string[]} meetings
+ * @property {Meeting[]} meetings
  * @property {Bullet[]} bullets
- * @property {string[]} syncItems
+ * @property {SyncItem[]} syncItems
  * @property {Object<number, boolean>} presetChecks
  * @property {string} savedAt
  */
@@ -46,9 +65,9 @@
 
 /**
  * @typedef {Object} HistoryEntry
- * @property {string[]} meetings
+ * @property {Meeting[]} meetings
  * @property {Bullet[]} bullets
- * @property {string[]} syncItems
+ * @property {SyncItem[]} syncItems
  * @property {Object<number, boolean>} presetChecks
  * @property {string} notesForNextWeek
  */
@@ -108,7 +127,7 @@ const DEF_SYNC_OPERATIONS = [
 const LS_KEY = 'fountain_report_v3';
 const LS_TEMPLATES_KEY = 'ss_report_custom_templates';
 const SLACK_CHAR_LIMIT = 4000;
-const CURRENT_DATA_VERSION = 2;
+const CURRENT_DATA_VERSION = 4;
 const MAX_HISTORY_SIZE = 50;
 const DEBOUNCE_DELAY = 700;
 const TOAST_DURATION = 3000;
@@ -392,6 +411,14 @@ function sanitize(s) {
   return String(s);
 }
 
+/**
+ * Generate a unique ID for items
+ * @returns {string}
+ */
+function generateId() {
+  return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).substr(2, 9);
+}
+
 // ── Data Migration ───────────────────────────────────────────────────────────
 
 /**
@@ -401,15 +428,58 @@ function sanitize(s) {
  */
 function migrateBullet(bullet) {
   if (typeof bullet === 'string') {
-    return { text: bullet, carryForward: false };
+    return { id: generateId(), text: bullet, carryForward: false, addedBy: null, addedAt: null };
   }
   if (typeof bullet === 'object' && bullet !== null) {
     return {
+      id: bullet.id || generateId(),
       text: sanitize(bullet.text),
-      carryForward: Boolean(bullet.carryForward)
+      carryForward: Boolean(bullet.carryForward),
+      addedBy: bullet.addedBy || null,
+      addedAt: bullet.addedAt || null
     };
   }
-  return { text: '', carryForward: false };
+  return { id: generateId(), text: '', carryForward: false, addedBy: null, addedAt: null };
+}
+
+/**
+ * Migrate meetings from string format to object format
+ * @param {any} meeting
+ * @returns {Meeting}
+ */
+function migrateMeeting(meeting) {
+  if (typeof meeting === 'string') {
+    return { id: generateId(), text: meeting, addedBy: null, addedAt: null };
+  }
+  if (typeof meeting === 'object' && meeting !== null) {
+    return {
+      id: meeting.id || generateId(),
+      text: sanitize(meeting.text),
+      addedBy: meeting.addedBy || null,
+      addedAt: meeting.addedAt || null
+    };
+  }
+  return { id: generateId(), text: '', addedBy: null, addedAt: null };
+}
+
+/**
+ * Migrate sync items from string format to object format
+ * @param {any} item
+ * @returns {SyncItem}
+ */
+function migrateSyncItem(item) {
+  if (typeof item === 'string') {
+    return { id: generateId(), text: item, addedBy: null, addedAt: null };
+  }
+  if (typeof item === 'object' && item !== null) {
+    return {
+      id: item.id || generateId(),
+      text: sanitize(item.text),
+      addedBy: item.addedBy || null,
+      addedAt: item.addedAt || null
+    };
+  }
+  return { id: generateId(), text: '', addedBy: null, addedAt: null };
 }
 
 /**
@@ -431,6 +501,45 @@ function migrateData(data) {
       }
     }
     data.version = 2;
+  }
+
+  if (version < 3) {
+    // Migrate meetings and syncItems from string to object format
+    // Also ensure bullets have attribution fields
+    if (data.weeks) {
+      for (const wid of Object.keys(data.weeks)) {
+        const week = data.weeks[wid];
+        if (week.meetings && Array.isArray(week.meetings)) {
+          week.meetings = week.meetings.map(migrateMeeting);
+        }
+        if (week.syncItems && Array.isArray(week.syncItems)) {
+          week.syncItems = week.syncItems.map(migrateSyncItem);
+        }
+        if (week.bullets && Array.isArray(week.bullets)) {
+          week.bullets = week.bullets.map(migrateBullet);
+        }
+      }
+    }
+    data.version = 3;
+  }
+
+  if (version < 4) {
+    // Ensure all items have unique IDs
+    if (data.weeks) {
+      for (const wid of Object.keys(data.weeks)) {
+        const week = data.weeks[wid];
+        if (week.meetings && Array.isArray(week.meetings)) {
+          week.meetings = week.meetings.map(m => ({ ...m, id: m.id || generateId() }));
+        }
+        if (week.syncItems && Array.isArray(week.syncItems)) {
+          week.syncItems = week.syncItems.map(s => ({ ...s, id: s.id || generateId() }));
+        }
+        if (week.bullets && Array.isArray(week.bullets)) {
+          week.bullets = week.bullets.map(b => ({ ...b, id: b.id || generateId() }));
+        }
+      }
+    }
+    data.version = 4;
   }
 
   return data;
@@ -507,9 +616,307 @@ function clearFirestoreStore() {
   firestoreStoreCache = null;
 }
 
+/**
+ * Get current user's display name for attribution
+ * @returns {string|null}
+ */
+function getCurrentUserDisplayName() {
+  if (window.firebaseAuth && window.firebaseAuth.isSignedIn()) {
+    const user = window.firebaseAuth.getCurrentUser();
+    if (user) {
+      return user.displayName || user.email || 'Unknown';
+    }
+  }
+  return null;
+}
+
+/**
+ * Format a timestamp for display
+ * @param {string|null} isoString
+ * @returns {string}
+ */
+function formatAttributionDate(isoString) {
+  if (!isoString) return '';
+  try {
+    const date = new Date(isoString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+      ', ' + date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Generate a consistent color from a string (user name)
+ * @param {string} str
+ * @returns {string} HSL color string
+ */
+function stringToColor(str) {
+  if (!str) return 'transparent';
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue}, 70%, 50%)`;
+}
+
 // Expose for firebase.js
 window.setFirestoreStore = setFirestoreStore;
 window.clearFirestoreStore = clearFirestoreStore;
+
+// ── Collaboration State ──────────────────────────────────────────────────────
+
+const CollabState = {
+  presenceUsers: [],
+  comments: [],
+  activities: [],
+  expandedComments: {} // { itemId: true }
+};
+
+/**
+ * Clear collaboration state (called on sign-out)
+ */
+function clearCollaborationState() {
+  CollabState.presenceUsers = [];
+  CollabState.comments = [];
+  CollabState.activities = [];
+  CollabState.expandedComments = {};
+  renderPresenceAvatars();
+  renderActivityFeed();
+}
+window.clearCollaborationState = clearCollaborationState;
+
+/**
+ * Render presence avatars in header
+ */
+function renderPresenceAvatars() {
+  const container = document.getElementById('presenceAvatars');
+  if (!container) return;
+
+  container.innerHTML = '';
+  const users = CollabState.presenceUsers;
+  const currentUser = window.firebaseAuth?.getCurrentUser?.();
+  const currentUid = currentUser?.uid;
+
+  // Filter out current user and show max 5 avatars
+  const otherUsers = users.filter(u => u.odingUserId !== currentUid);
+  const displayUsers = otherUsers.slice(0, 5);
+  const remaining = otherUsers.length - 5;
+
+  displayUsers.forEach(user => {
+    const avatar = document.createElement('div');
+    avatar.className = 'presence-avatar';
+    avatar.style.background = user.color || stringToColor(user.displayName);
+    avatar.setAttribute('data-tooltip', user.displayName);
+
+    if (user.photoURL) {
+      const img = document.createElement('img');
+      img.src = user.photoURL;
+      img.alt = user.displayName;
+      img.onerror = () => {
+        img.remove();
+        avatar.textContent = getInitials(user.displayName);
+      };
+      avatar.appendChild(img);
+    } else {
+      avatar.textContent = getInitials(user.displayName);
+    }
+
+    container.appendChild(avatar);
+  });
+
+  if (remaining > 0) {
+    const countBadge = document.createElement('div');
+    countBadge.className = 'presence-count';
+    countBadge.textContent = '+' + remaining;
+    countBadge.setAttribute('data-tooltip', remaining + ' more online');
+    container.appendChild(countBadge);
+  }
+}
+
+/**
+ * Get initials from display name
+ * @param {string} name
+ * @returns {string}
+ */
+function getInitials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(' ');
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return name.substring(0, 2).toUpperCase();
+}
+
+/**
+ * Format relative time for activity feed
+ * @param {number} timestamp
+ * @returns {string}
+ */
+function formatRelativeTime(timestamp) {
+  const now = Date.now();
+  const diff = now - timestamp;
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return minutes + 'm ago';
+  if (hours < 24) return hours + 'h ago';
+  if (days < 7) return days + 'd ago';
+  return new Date(timestamp).toLocaleDateString();
+}
+
+/**
+ * Render activity feed in sidebar
+ */
+function renderActivityFeed() {
+  const container = document.getElementById('activityFeed');
+  const list = document.getElementById('activityList');
+  if (!container || !list) return;
+
+  const activities = CollabState.activities;
+  const currentUser = window.firebaseAuth?.getCurrentUser?.();
+  const currentUid = currentUser?.uid;
+
+  // Show/hide feed based on sign-in status
+  if (!window.firebaseAuth?.isSignedIn?.()) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = '';
+
+  list.innerHTML = '';
+
+  if (activities.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'activity-empty';
+    empty.textContent = 'No recent activity';
+    list.appendChild(empty);
+    return;
+  }
+
+  activities.slice(0, 20).forEach(activity => {
+    const item = document.createElement('div');
+    item.className = 'activity-item';
+
+    // Highlight if this activity mentions current user
+    if (activity.mentions?.includes(currentUid)) {
+      item.classList.add('is-mention');
+    }
+
+    const avatar = document.createElement('div');
+    avatar.className = 'activity-avatar';
+    avatar.style.background = activity.actorColor || stringToColor(activity.actorName);
+    avatar.textContent = getInitials(activity.actorName);
+
+    const content = document.createElement('div');
+    content.className = 'activity-content';
+
+    const text = document.createElement('div');
+    text.className = 'activity-text';
+    text.innerHTML = '<strong>' + escapeHtml(activity.actorName) + '</strong> ' + escapeHtml(activity.action);
+
+    content.appendChild(text);
+
+    if (activity.targetText) {
+      const target = document.createElement('div');
+      target.className = 'activity-target';
+      target.textContent = '"' + activity.targetText + '"';
+      content.appendChild(target);
+    }
+
+    const time = document.createElement('div');
+    time.className = 'activity-time';
+    time.textContent = formatRelativeTime(activity.timestamp);
+    content.appendChild(time);
+
+    item.appendChild(avatar);
+    item.appendChild(content);
+    list.appendChild(item);
+  });
+}
+
+/**
+ * Escape HTML for safe display
+ * @param {string} str
+ * @returns {string}
+ */
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * Handle presence update from Firebase
+ * @param {Array} users
+ */
+function onPresenceUpdated(users) {
+  CollabState.presenceUsers = users;
+  renderPresenceAvatars();
+}
+
+/**
+ * Handle activities update from Firebase
+ * @param {Array} activities
+ */
+function onActivitiesUpdated(activities) {
+  const currentUser = window.firebaseAuth?.getCurrentUser?.();
+  const currentUid = currentUser?.uid;
+
+  // Check for new mentions
+  const oldActivities = CollabState.activities;
+  if (oldActivities.length > 0 && activities.length > 0) {
+    const latestOld = oldActivities[0]?.timestamp || 0;
+    activities.forEach(activity => {
+      if (activity.timestamp > latestOld &&
+          activity.mentions?.includes(currentUid) &&
+          activity.actorUid !== currentUid) {
+        showToast(activity.actorName + ' mentioned you', 'info');
+      }
+    });
+  }
+
+  CollabState.activities = activities;
+  renderActivityFeed();
+}
+
+/**
+ * Handle comments update from Firebase
+ * @param {Array} comments
+ */
+function onCommentsUpdated(comments) {
+  CollabState.comments = comments;
+  // Re-render item lists to show updated comment counts
+  if (AppState.dirty.meetings || AppState.dirty.bullets || AppState.dirty.syncItems) {
+    return; // Will be rendered soon anyway
+  }
+  renderMeetings();
+  renderBullets();
+  renderSyncItems();
+}
+
+/**
+ * Log an activity
+ * @param {string} type
+ * @param {string} action
+ * @param {string} targetText
+ * @param {string[]} mentions
+ */
+function logActivity(type, action, targetText, mentions) {
+  if (!window.firebaseAuth?.isSignedIn?.()) return;
+  window.firebaseAuth.logActivity({
+    weekId: AppState.activeWeekId,
+    type: type,
+    action: action,
+    targetText: targetText || '',
+    mentions: mentions || []
+  });
+}
 
 /**
  * Load custom templates from localStorage
@@ -609,9 +1016,9 @@ function removeToast(toast) {
  */
 function getStateSnapshot() {
   return {
-    meetings: [...AppState.meetings],
+    meetings: AppState.meetings.map(m => ({ ...m })),
     bullets: AppState.bullets.map(b => ({ ...b })),
-    syncItems: [...AppState.syncItems],
+    syncItems: AppState.syncItems.map(s => ({ ...s })),
     presetChecks: { ...AppState.presetChecks },
     notesForNextWeek: getF('notesForNextWeek')
   };
@@ -645,9 +1052,9 @@ function pushHistory() {
  * @param {HistoryEntry} entry
  */
 function restoreState(entry) {
-  AppState.meetings = [...entry.meetings];
+  AppState.meetings = entry.meetings.map(m => ({ ...m }));
   AppState.bullets = entry.bullets.map(b => ({ ...b }));
-  AppState.syncItems = [...entry.syncItems];
+  AppState.syncItems = entry.syncItems.map(s => ({ ...s }));
   AppState.presetChecks = { ...entry.presetChecks };
   setF('notesForNextWeek', entry.notesForNextWeek);
 
@@ -814,7 +1221,22 @@ function init() {
   if (window.firebaseAuth) {
     window.firebaseAuth.init();
     window.firebaseAuth.setOnStoreUpdatedCallback(onFirestoreStoreUpdated);
+
+    // Collaboration callbacks
+    window.firebaseAuth.setOnPresenceUpdatedCallback(onPresenceUpdated);
+    window.firebaseAuth.setOnActivitiesUpdatedCallback(onActivitiesUpdated);
+    window.firebaseAuth.setOnCommentsUpdatedCallback(onCommentsUpdated);
+
+    // Start presence heartbeat with current week getter
+    window.firebaseAuth.startPresenceHeartbeat(() => AppState.activeWeekId);
   }
+
+  // Handle page unload - remove presence
+  window.addEventListener('beforeunload', () => {
+    if (window.firebaseAuth?.removePresence) {
+      window.firebaseAuth.removePresence();
+    }
+  });
 
   // Initialize undo/redo
   clearHistory();
@@ -842,9 +1264,9 @@ function loadWeek(wid) {
     setF('syncMeeting', sanitize(saved.syncMeeting) || '');
     setF('privateNotes', sanitize(saved.privateNotes) || '');
     setF('notesForNextWeek', sanitize(saved.notesForNextWeek) || '');
-    AppState.meetings = (saved.meetings || getDefMeetings()).map(sanitize);
-    AppState.bullets = (saved.bullets || [{ text: '', carryForward: false }]).map(migrateBullet);
-    AppState.syncItems = (saved.syncItems || getDefSync()).map(sanitize);
+    AppState.meetings = (saved.meetings || getDefMeetings()).map(migrateMeeting);
+    AppState.bullets = (saved.bullets || [{ text: '', carryForward: false, addedBy: null, addedAt: null }]).map(migrateBullet);
+    AppState.syncItems = (saved.syncItems || getDefSync()).map(migrateSyncItem);
     AppState.presetChecks = { ...(saved.presetChecks || {}) };
     AppState.notesForNextWeek = sanitize(saved.notesForNextWeek) || '';
   } else {
@@ -862,9 +1284,9 @@ function loadWeek(wid) {
       : 'Front Office Sync Monthly Meeting on [DATE] to review the following:');
     setF('privateNotes', '');
     setF('notesForNextWeek', carryNotes);
-    AppState.meetings = [...getDefMeetings()];
-    AppState.bullets = carryBullets.length > 0 ? carryBullets : [{ text: '', carryForward: false }];
-    AppState.syncItems = [...getDefSync()];
+    AppState.meetings = getDefMeetings().map(migrateMeeting);
+    AppState.bullets = carryBullets.length > 0 ? carryBullets : [{ id: generateId(), text: '', carryForward: false, addedBy: null, addedAt: null }];
+    AppState.syncItems = getDefSync().map(migrateSyncItem);
     AppState.presetChecks = {};
     AppState.notesForNextWeek = carryNotes;
   }
@@ -876,6 +1298,16 @@ function loadWeek(wid) {
   renderSparkline();
   update();
   clearHistory();
+
+  // Subscribe to comments for this week
+  if (window.firebaseAuth?.subscribeToComments) {
+    window.firebaseAuth.subscribeToComments(wid);
+  }
+
+  // Update presence with current week
+  if (window.firebaseAuth?.updatePresence) {
+    window.firebaseAuth.updatePresence(wid);
+  }
 }
 
 /**
@@ -931,9 +1363,9 @@ function saveWeek() {
     syncMeeting: getF('syncMeeting'),
     privateNotes: getF('privateNotes'),
     notesForNextWeek: AppState.notesForNextWeek,
-    meetings: [...AppState.meetings],
+    meetings: AppState.meetings.map(m => ({ ...m })),
     bullets: AppState.bullets.map(b => ({ ...b })),
-    syncItems: [...AppState.syncItems],
+    syncItems: AppState.syncItems.map(s => ({ ...s })),
     presetChecks: { ...AppState.presetChecks },
     savedAt: new Date().toISOString()
   };
@@ -1164,12 +1596,17 @@ function startNewWeek() {
 /**
  * Render an editable list (meetings, bullets, sync items)
  * @param {string} containerId - Container element ID
- * @param {string[]|Bullet[]} items - Items to render
+ * @param {Meeting[]|Bullet[]|SyncItem[]} items - Items to render
  * @param {ListOptions} options - Rendering options
  */
 function renderEditableList(containerId, items, options) {
   const container = document.getElementById(containerId);
   if (!container) return;
+
+  // Determine item type from container ID
+  const itemType = containerId === 'meetingsList' ? 'meeting'
+    : containerId === 'bulletsList' ? 'bullet'
+    : containerId === 'syncItems' ? 'syncItem' : 'item';
 
   // Clear existing
   while (container.firstChild) {
@@ -1177,6 +1614,11 @@ function renderEditableList(containerId, items, options) {
   }
 
   items.forEach((item, i) => {
+    const itemId = item.id || '';
+    const wrapper = document.createElement('div');
+    wrapper.className = 'bullet-item-wrapper';
+    wrapper.setAttribute('data-item-id', itemId);
+
     const row = document.createElement('div');
     row.className = 'bullet-row';
 
@@ -1206,6 +1648,24 @@ function renderEditableList(containerId, items, options) {
       row.appendChild(carryBtn);
     }
 
+    // Comment button (only if signed in)
+    if (window.firebaseAuth?.isSignedIn?.() && itemId) {
+      const commentCount = getCommentCountForItem(itemId);
+      const commentBtn = document.createElement('button');
+      commentBtn.className = 'btn-comment' + (commentCount > 0 ? ' has-comments' : '');
+      commentBtn.title = commentCount > 0 ? `${commentCount} comment${commentCount > 1 ? 's' : ''}` : 'Add comment';
+      commentBtn.setAttribute('aria-label', 'Comments');
+      commentBtn.innerHTML = '\u{1F4AC}'; // Speech bubble emoji
+      if (commentCount > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'comment-badge';
+        badge.textContent = commentCount;
+        commentBtn.appendChild(badge);
+      }
+      commentBtn.onclick = () => toggleCommentThread(itemId, itemType, wrapper);
+      row.appendChild(commentBtn);
+    }
+
     // Remove button
     const removeBtn = document.createElement('button');
     removeBtn.className = 'btn-remove';
@@ -1219,7 +1679,177 @@ function renderEditableList(containerId, items, options) {
     };
 
     row.appendChild(removeBtn);
-    container.appendChild(row);
+    wrapper.appendChild(row);
+
+    // Attribution line and colored border (if item has addedBy)
+    if (typeof item === 'object' && item.addedBy) {
+      const userColor = stringToColor(item.addedBy);
+      wrapper.style.borderLeft = `3px solid ${userColor}`;
+      wrapper.classList.add('has-attribution');
+
+      const attribution = document.createElement('div');
+      attribution.className = 'item-attribution';
+      attribution.style.color = userColor;
+      const dateStr = formatAttributionDate(item.addedAt);
+      attribution.textContent = dateStr
+        ? `Added by ${item.addedBy} on ${dateStr}`
+        : `Added by ${item.addedBy}`;
+      wrapper.appendChild(attribution);
+    }
+
+    // Render comment thread if expanded
+    if (CollabState.expandedComments[itemId]) {
+      renderCommentThread(itemId, itemType, wrapper);
+    }
+
+    container.appendChild(wrapper);
+  });
+}
+
+/**
+ * Get comment count for an item
+ * @param {string} itemId
+ * @returns {number}
+ */
+function getCommentCountForItem(itemId) {
+  return CollabState.comments.filter(c => c.itemId === itemId && !c.resolved).length;
+}
+
+/**
+ * Toggle comment thread visibility
+ * @param {string} itemId
+ * @param {string} itemType
+ * @param {HTMLElement} wrapper
+ */
+function toggleCommentThread(itemId, itemType, wrapper) {
+  if (CollabState.expandedComments[itemId]) {
+    delete CollabState.expandedComments[itemId];
+    const thread = wrapper.querySelector('.comment-thread');
+    if (thread) thread.remove();
+  } else {
+    CollabState.expandedComments[itemId] = true;
+    renderCommentThread(itemId, itemType, wrapper);
+  }
+}
+
+/**
+ * Render comment thread for an item
+ * @param {string} itemId
+ * @param {string} itemType
+ * @param {HTMLElement} wrapper
+ */
+function renderCommentThread(itemId, itemType, wrapper) {
+  // Remove existing thread if any
+  const existing = wrapper.querySelector('.comment-thread');
+  if (existing) existing.remove();
+
+  const thread = document.createElement('div');
+  thread.className = 'comment-thread';
+
+  const comments = CollabState.comments.filter(c => c.itemId === itemId && !c.resolved);
+
+  // Render existing comments
+  comments.forEach(comment => {
+    const commentEl = document.createElement('div');
+    commentEl.className = 'comment-item';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'comment-avatar';
+    avatar.style.background = comment.authorColor || stringToColor(comment.authorName);
+    avatar.textContent = getInitials(comment.authorName);
+
+    const content = document.createElement('div');
+    content.className = 'comment-content';
+
+    const header = document.createElement('div');
+    header.className = 'comment-header';
+    header.innerHTML = '<strong>' + escapeHtml(comment.authorName) + '</strong> <span class="comment-time">' +
+      formatRelativeTime(comment.createdAt) + '</span>';
+
+    const text = document.createElement('div');
+    text.className = 'comment-text';
+    text.textContent = comment.text;
+
+    content.appendChild(header);
+    content.appendChild(text);
+
+    commentEl.appendChild(avatar);
+    commentEl.appendChild(content);
+
+    // Delete button for own comments
+    const currentUser = window.firebaseAuth?.getCurrentUser?.();
+    if (currentUser && comment.authorUid === currentUser.uid) {
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'comment-delete';
+      deleteBtn.textContent = '\u2715';
+      deleteBtn.title = 'Delete comment';
+      deleteBtn.onclick = () => {
+        window.firebaseAuth.deleteComment(comment.id).then(() => {
+          showToast('Comment deleted', 'success');
+        });
+      };
+      commentEl.appendChild(deleteBtn);
+    }
+
+    thread.appendChild(commentEl);
+  });
+
+  // Add comment input
+  const inputRow = document.createElement('div');
+  inputRow.className = 'comment-input-row';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'comment-input';
+  input.placeholder = 'Write a comment...';
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter' && input.value.trim()) {
+      submitComment(itemId, itemType, input.value.trim(), wrapper);
+      input.value = '';
+    }
+  };
+
+  const sendBtn = document.createElement('button');
+  sendBtn.className = 'comment-send';
+  sendBtn.textContent = 'Send';
+  sendBtn.onclick = () => {
+    if (input.value.trim()) {
+      submitComment(itemId, itemType, input.value.trim(), wrapper);
+      input.value = '';
+    }
+  };
+
+  inputRow.appendChild(input);
+  inputRow.appendChild(sendBtn);
+  thread.appendChild(inputRow);
+
+  wrapper.appendChild(thread);
+
+  // Focus the input
+  input.focus();
+}
+
+/**
+ * Submit a comment
+ * @param {string} itemId
+ * @param {string} itemType
+ * @param {string} text
+ * @param {HTMLElement} wrapper
+ */
+function submitComment(itemId, itemType, text, wrapper) {
+  if (!window.firebaseAuth?.addComment) return;
+
+  window.firebaseAuth.addComment({
+    weekId: AppState.activeWeekId,
+    itemId: itemId,
+    itemType: itemType,
+    text: text
+  }).then(() => {
+    showToast('Comment added', 'success');
+    logActivity('comment', 'commented on a ' + itemType, text);
+  }).catch(err => {
+    console.error('Failed to add comment:', err);
+    showToast('Failed to add comment', 'error');
   });
 }
 
@@ -1282,7 +1912,7 @@ function renderPresets() {
 function renderMeetings() {
   renderEditableList('meetingsList', AppState.meetings, {
     placeholder: 'Meeting name...',
-    onUpdate: (i, val) => { AppState.meetings[i] = val; },
+    onUpdate: (i, val) => { AppState.meetings[i].text = val; },
     onRemove: (i) => {
       AppState.meetings.splice(i, 1);
       renderMeetings();
@@ -1318,7 +1948,7 @@ function renderBullets() {
 function renderSyncItems() {
   renderEditableList('syncItems', AppState.syncItems, {
     placeholder: 'Agenda item...',
-    onUpdate: (i, val) => { AppState.syncItems[i] = val; },
+    onUpdate: (i, val) => { AppState.syncItems[i].text = val; },
     onRemove: (i) => {
       AppState.syncItems.splice(i, 1);
       renderSyncItems();
@@ -1330,7 +1960,13 @@ function renderSyncItems() {
  * Add a new meeting
  */
 function addMeeting() {
-  AppState.meetings.push('');
+  const userName = getCurrentUserDisplayName();
+  AppState.meetings.push({
+    id: generateId(),
+    text: '',
+    addedBy: userName,
+    addedAt: userName ? new Date().toISOString() : null
+  });
   renderMeetings();
   update();
   // Focus the new input
@@ -1344,7 +1980,14 @@ function addMeeting() {
  * Add a new bullet
  */
 function addBullet() {
-  AppState.bullets.push({ text: '', carryForward: false });
+  const userName = getCurrentUserDisplayName();
+  AppState.bullets.push({
+    id: generateId(),
+    text: '',
+    carryForward: false,
+    addedBy: userName,
+    addedAt: userName ? new Date().toISOString() : null
+  });
   renderBullets();
   update();
   const inputs = document.querySelectorAll('#bulletsList input');
@@ -1357,7 +2000,13 @@ function addBullet() {
  * Add a new sync item
  */
 function addSyncItem() {
-  AppState.syncItems.push('');
+  const userName = getCurrentUserDisplayName();
+  AppState.syncItems.push({
+    id: generateId(),
+    text: '',
+    addedBy: userName,
+    addedAt: userName ? new Date().toISOString() : null
+  });
   renderSyncItems();
   update();
   const inputs = document.querySelectorAll('#syncItems input');
@@ -1561,13 +2210,12 @@ function copyFromLastWeek() {
 
   const prev = store.weeks[prevWid];
 
-  AppState.meetings = (prev.meetings || []).map(sanitize);
-  AppState.bullets = (prev.bullets || []).map(b =>
-    typeof b === 'string'
-      ? { text: b, carryForward: false }
-      : { text: b.text, carryForward: false }
-  );
-  AppState.syncItems = (prev.syncItems || []).map(sanitize);
+  AppState.meetings = (prev.meetings || []).map(migrateMeeting);
+  AppState.bullets = (prev.bullets || []).map(b => {
+    const migrated = migrateBullet(b);
+    return { ...migrated, carryForward: false };
+  });
+  AppState.syncItems = (prev.syncItems || []).map(migrateSyncItem);
   AppState.presetChecks = { ...(prev.presetChecks || {}) };
   setF('notesForNextWeek', prev.notesForNextWeek || '');
   AppState.notesForNextWeek = prev.notesForNextWeek || '';
@@ -1613,10 +2261,10 @@ function generateReport(format) {
   }
 
   // Meetings
-  const mtgs = AppState.meetings.filter(m => m.trim());
+  const mtgs = AppState.meetings.filter(m => m.text && m.text.trim());
   if (mtgs.length) {
     out += isSlack ? '\n' : '';
-    mtgs.forEach(m => out += `${m}\n`);
+    mtgs.forEach(m => out += `${m.text}\n`);
   }
 
   // Accomplishments (presets + bullets)
@@ -1637,12 +2285,12 @@ function generateReport(format) {
 
   // Sync items
   const syncMtg = getF('syncMeeting').trim();
-  const sItems = AppState.syncItems.filter(s => s.trim());
+  const sItems = AppState.syncItems.filter(s => s.text && s.text.trim());
 
   if (syncMtg || sItems.length) {
     out += '\n';
     if (syncMtg) out += bold(syncMtg) + '\n';
-    sItems.forEach(s => out += `\u2022 ${s}\n`);
+    sItems.forEach(s => out += `\u2022 ${s.text}\n`);
   }
 
   return out.trim();

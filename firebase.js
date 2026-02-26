@@ -21,6 +21,19 @@
   var unsubscribeSnapshot = null;
   var onStoreUpdatedCallback = null;
 
+  // Collaboration: Presence, Comments, Activities
+  var presenceRef = null;
+  var commentsRef = null;
+  var activitiesRef = null;
+  var unsubscribePresence = null;
+  var unsubscribeComments = null;
+  var unsubscribeActivities = null;
+  var presenceInterval = null;
+  var onPresenceUpdatedCallback = null;
+  var onCommentsUpdatedCallback = null;
+  var onActivitiesUpdatedCallback = null;
+  var cachedPresenceUsers = [];
+
   function initFirebase() {
     if (app) return;
     app = firebase.initializeApp(firebaseConfig);
@@ -38,9 +51,24 @@
 
       if (user) {
         attachStoreListener();
+        initCollaborationRefs();
+        subscribeToPresence();
+        subscribeToActivities();
       } else {
         detachStoreListener();
+        unsubscribeFromPresence();
+        removePresence();
+        if (unsubscribeComments) {
+          unsubscribeComments();
+          unsubscribeComments = null;
+        }
+        if (unsubscribeActivities) {
+          unsubscribeActivities();
+          unsubscribeActivities = null;
+        }
+        cachedPresenceUsers = [];
         if (typeof window.clearFirestoreStore === 'function') window.clearFirestoreStore();
+        if (typeof window.clearCollaborationState === 'function') window.clearCollaborationState();
       }
     });
   }
@@ -123,6 +151,233 @@
     onStoreUpdatedCallback = fn;
   }
 
+  // ── Presence System ─────────────────────────────────────────────────────────
+
+  function initCollaborationRefs() {
+    if (!db) return;
+    presenceRef = storeDocRef.collection('presence');
+    commentsRef = storeDocRef.collection('comments');
+    activitiesRef = storeDocRef.collection('activities');
+  }
+
+  function stringToColorFirebase(str) {
+    if (!str) return 'hsl(0, 0%, 50%)';
+    var hash = 0;
+    for (var i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    var hue = Math.abs(hash) % 360;
+    return 'hsl(' + hue + ', 70%, 50%)';
+  }
+
+  function updatePresence(activeWeekId) {
+    if (!presenceRef || !auth || !auth.currentUser) return;
+    var user = auth.currentUser;
+    var presenceData = {
+      odingUserId: user.uid,
+      displayName: user.displayName || user.email || 'Anonymous',
+      email: user.email || '',
+      photoURL: user.photoURL || '',
+      color: stringToColorFirebase(user.displayName || user.email),
+      lastSeen: firebase.firestore.FieldValue.serverTimestamp(),
+      activeWeekId: activeWeekId || ''
+    };
+    presenceRef.doc(user.uid).set(presenceData, { merge: true }).catch(function(err) {
+      console.error('Presence update error:', err);
+    });
+  }
+
+  function removePresence() {
+    if (!presenceRef || !auth || !auth.currentUser) return;
+    presenceRef.doc(auth.currentUser.uid).delete().catch(function(err) {
+      console.error('Presence remove error:', err);
+    });
+  }
+
+  function subscribeToPresence() {
+    if (unsubscribePresence || !presenceRef) return;
+    unsubscribePresence = presenceRef.onSnapshot(function(snapshot) {
+      var users = [];
+      var now = Date.now();
+      var twoMinutesAgo = now - (2 * 60 * 1000);
+      snapshot.forEach(function(doc) {
+        var data = doc.data();
+        var lastSeen = data.lastSeen ? data.lastSeen.toMillis() : 0;
+        if (lastSeen > twoMinutesAgo) {
+          users.push({
+            odingUserId: data.odingUserId,
+            displayName: data.displayName,
+            email: data.email,
+            photoURL: data.photoURL,
+            color: data.color,
+            lastSeen: lastSeen,
+            activeWeekId: data.activeWeekId
+          });
+        }
+      });
+      cachedPresenceUsers = users;
+      if (typeof onPresenceUpdatedCallback === 'function') {
+        onPresenceUpdatedCallback(users);
+      }
+    }, function(err) {
+      console.error('Presence snapshot error:', err);
+    });
+  }
+
+  function unsubscribeFromPresence() {
+    if (unsubscribePresence) {
+      unsubscribePresence();
+      unsubscribePresence = null;
+    }
+    if (presenceInterval) {
+      clearInterval(presenceInterval);
+      presenceInterval = null;
+    }
+  }
+
+  function startPresenceHeartbeat(getActiveWeekId) {
+    if (presenceInterval) clearInterval(presenceInterval);
+    updatePresence(getActiveWeekId ? getActiveWeekId() : '');
+    presenceInterval = setInterval(function() {
+      updatePresence(getActiveWeekId ? getActiveWeekId() : '');
+    }, 30000);
+  }
+
+  function getPresenceUsers() {
+    return cachedPresenceUsers;
+  }
+
+  // ── Comments System ─────────────────────────────────────────────────────────
+
+  function subscribeToComments(weekId) {
+    if (unsubscribeComments) {
+      unsubscribeComments();
+      unsubscribeComments = null;
+    }
+    if (!commentsRef || !weekId) return;
+    unsubscribeComments = commentsRef
+      .where('weekId', '==', weekId)
+      .orderBy('createdAt', 'asc')
+      .onSnapshot(function(snapshot) {
+        var comments = [];
+        snapshot.forEach(function(doc) {
+          var data = doc.data();
+          comments.push({
+            id: doc.id,
+            weekId: data.weekId,
+            itemId: data.itemId,
+            itemType: data.itemType,
+            authorUid: data.authorUid,
+            authorName: data.authorName,
+            authorColor: data.authorColor,
+            text: data.text,
+            createdAt: data.createdAt ? data.createdAt.toMillis() : Date.now(),
+            resolved: data.resolved || false
+          });
+        });
+        if (typeof onCommentsUpdatedCallback === 'function') {
+          onCommentsUpdatedCallback(comments);
+        }
+      }, function(err) {
+        console.error('Comments snapshot error:', err);
+      });
+  }
+
+  function addComment(commentData) {
+    if (!commentsRef || !auth || !auth.currentUser) return Promise.reject('Not authenticated');
+    var user = auth.currentUser;
+    var payload = {
+      weekId: commentData.weekId,
+      itemId: commentData.itemId,
+      itemType: commentData.itemType,
+      authorUid: user.uid,
+      authorName: user.displayName || user.email || 'Anonymous',
+      authorColor: stringToColorFirebase(user.displayName || user.email),
+      text: commentData.text,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      resolved: false
+    };
+    return commentsRef.add(payload);
+  }
+
+  function resolveComment(commentId) {
+    if (!commentsRef) return Promise.reject('Not initialized');
+    return commentsRef.doc(commentId).update({ resolved: true });
+  }
+
+  function deleteComment(commentId) {
+    if (!commentsRef) return Promise.reject('Not initialized');
+    return commentsRef.doc(commentId).delete();
+  }
+
+  // ── Activities System ───────────────────────────────────────────────────────
+
+  function subscribeToActivities() {
+    if (unsubscribeActivities || !activitiesRef) return;
+    var sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    unsubscribeActivities = activitiesRef
+      .where('timestamp', '>', sevenDaysAgo)
+      .orderBy('timestamp', 'desc')
+      .limit(50)
+      .onSnapshot(function(snapshot) {
+        var activities = [];
+        snapshot.forEach(function(doc) {
+          var data = doc.data();
+          activities.push({
+            id: doc.id,
+            weekId: data.weekId,
+            type: data.type,
+            actorUid: data.actorUid,
+            actorName: data.actorName,
+            actorColor: data.actorColor,
+            action: data.action,
+            targetText: data.targetText,
+            timestamp: data.timestamp ? data.timestamp.toMillis() : Date.now(),
+            mentions: data.mentions || []
+          });
+        });
+        if (typeof onActivitiesUpdatedCallback === 'function') {
+          onActivitiesUpdatedCallback(activities);
+        }
+      }, function(err) {
+        console.error('Activities snapshot error:', err);
+      });
+  }
+
+  function logActivity(activityData) {
+    if (!activitiesRef || !auth || !auth.currentUser) return Promise.resolve();
+    var user = auth.currentUser;
+    var payload = {
+      weekId: activityData.weekId || '',
+      type: activityData.type,
+      actorUid: user.uid,
+      actorName: user.displayName || user.email || 'Anonymous',
+      actorColor: stringToColorFirebase(user.displayName || user.email),
+      action: activityData.action,
+      targetText: (activityData.targetText || '').substring(0, 50),
+      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      mentions: activityData.mentions || []
+    };
+    return activitiesRef.add(payload).catch(function(err) {
+      console.error('Activity log error:', err);
+    });
+  }
+
+  // ── Collaboration Callbacks ─────────────────────────────────────────────────
+
+  function setOnPresenceUpdatedCallback(fn) {
+    onPresenceUpdatedCallback = fn;
+  }
+
+  function setOnCommentsUpdatedCallback(fn) {
+    onCommentsUpdatedCallback = fn;
+  }
+
+  function setOnActivitiesUpdatedCallback(fn) {
+    onActivitiesUpdatedCallback = fn;
+  }
+
   window.firebaseAuth = {
     init: initFirebase,
     signIn: toggleFirebaseAuth,
@@ -130,7 +385,24 @@
     getCurrentUser: getCurrentUser,
     isSignedIn: isSignedIn,
     saveStoreToFirestore: saveStoreToFirestore,
-    setOnStoreUpdatedCallback: setOnStoreUpdatedCallback
+    setOnStoreUpdatedCallback: setOnStoreUpdatedCallback,
+    // Presence
+    updatePresence: updatePresence,
+    removePresence: removePresence,
+    subscribeToPresence: subscribeToPresence,
+    startPresenceHeartbeat: startPresenceHeartbeat,
+    getPresenceUsers: getPresenceUsers,
+    setOnPresenceUpdatedCallback: setOnPresenceUpdatedCallback,
+    // Comments
+    subscribeToComments: subscribeToComments,
+    addComment: addComment,
+    resolveComment: resolveComment,
+    deleteComment: deleteComment,
+    setOnCommentsUpdatedCallback: setOnCommentsUpdatedCallback,
+    // Activities
+    subscribeToActivities: subscribeToActivities,
+    logActivity: logActivity,
+    setOnActivitiesUpdatedCallback: setOnActivitiesUpdatedCallback
   };
   window.toggleFirebaseAuth = toggleFirebaseAuth;
   window.firebaseSignOut = firebaseSignOut;
