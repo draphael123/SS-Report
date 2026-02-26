@@ -1127,15 +1127,16 @@ function onActivitiesUpdated(activities) {
   const currentUser = window.firebaseAuth?.getCurrentUser?.();
   const currentUid = currentUser?.uid;
 
-  // Check for new mentions
+  // Check for new mentions (only if notifications enabled)
   const oldActivities = CollabState.activities;
-  if (oldActivities.length > 0 && activities.length > 0) {
+  if (oldActivities.length > 0 && activities.length > 0 && Settings.mentionNotifications) {
     const latestOld = oldActivities[0]?.timestamp || 0;
     activities.forEach(activity => {
       if (activity.timestamp > latestOld &&
           activity.mentions?.includes(currentUid) &&
           activity.actorUid !== currentUid) {
         showToast(activity.actorName + ' mentioned you', 'info');
+        playNotificationSound();
       }
     });
   }
@@ -1423,6 +1424,240 @@ window.showNewTemplateForm = showNewTemplateForm;
 window.cancelTemplateForm = cancelTemplateForm;
 window.saveTemplate = saveTemplate;
 
+// ── Settings System ──────────────────────────────────────────────────────────
+
+const LS_SETTINGS_KEY = 'ss_report_settings';
+
+const Settings = {
+  // Display Preferences
+  compactView: false,
+  showPrivateNotes: true,
+  showInternalComments: true,
+  fontSize: 'medium', // 'small', 'medium', 'large'
+  // Notifications
+  mentionNotifications: true,
+  soundAlerts: false,
+  showActivityFeed: true,
+  // Collaboration
+  showPresence: true,
+  showEditedBy: true,
+  showItemAttribution: true,
+  realtimeSync: true
+};
+
+/**
+ * Load settings from localStorage
+ */
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(LS_SETTINGS_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      Object.assign(Settings, saved);
+    }
+  } catch (e) {
+    console.error('Failed to load settings:', e);
+  }
+  applySettings();
+  syncSettingsUI();
+}
+
+/**
+ * Save settings to localStorage
+ */
+function saveSettings() {
+  try {
+    localStorage.setItem(LS_SETTINGS_KEY, JSON.stringify(Settings));
+  } catch (e) {
+    console.error('Failed to save settings:', e);
+  }
+}
+
+/**
+ * Apply settings to the UI
+ */
+function applySettings() {
+  const body = document.body;
+
+  // Compact view
+  body.classList.toggle('compact-view', Settings.compactView);
+
+  // Font size
+  body.classList.remove('font-small', 'font-medium', 'font-large');
+  body.classList.add('font-' + Settings.fontSize);
+
+  // Show/hide Private Notes
+  const privateNotesCard = document.getElementById('privateNotes')?.closest('.card');
+  if (privateNotesCard) {
+    privateNotesCard.style.display = Settings.showPrivateNotes ? '' : 'none';
+  }
+
+  // Show/hide Internal Comments
+  const internalCommentsCard = document.getElementById('internalComments')?.closest('.card');
+  if (internalCommentsCard) {
+    internalCommentsCard.style.display = Settings.showInternalComments ? '' : 'none';
+  }
+
+  // Show/hide Activity Feed
+  const activityFeed = document.getElementById('activityFeed');
+  if (activityFeed) {
+    activityFeed.style.display = Settings.showActivityFeed ? '' : 'none';
+  }
+
+  // Show/hide Presence Avatars
+  const presenceAvatars = document.getElementById('presenceAvatars');
+  if (presenceAvatars) {
+    presenceAvatars.style.display = Settings.showPresence ? '' : 'none';
+  }
+
+  // Show/hide Edited By labels
+  const editLabels = document.querySelectorAll('.field-edit-label');
+  editLabels.forEach(label => {
+    label.style.display = Settings.showEditedBy ? '' : 'none';
+  });
+
+  // Show/hide Item Attribution
+  const attributions = document.querySelectorAll('.item-attribution');
+  attributions.forEach(attr => {
+    attr.style.display = Settings.showItemAttribution ? '' : 'none';
+  });
+
+  // Apply attribution border visibility
+  const attributedItems = document.querySelectorAll('.has-attribution');
+  attributedItems.forEach(item => {
+    item.style.borderLeftColor = Settings.showItemAttribution ? '' : 'transparent';
+  });
+}
+
+/**
+ * Sync settings UI checkboxes with current values
+ */
+function syncSettingsUI() {
+  const mappings = {
+    settingCompactView: 'compactView',
+    settingShowPrivateNotes: 'showPrivateNotes',
+    settingShowInternalComments: 'showInternalComments',
+    settingMentionNotifications: 'mentionNotifications',
+    settingSoundAlerts: 'soundAlerts',
+    settingShowActivityFeed: 'showActivityFeed',
+    settingShowPresence: 'showPresence',
+    settingShowEditedBy: 'showEditedBy',
+    settingShowItemAttribution: 'showItemAttribution',
+    settingRealtimeSync: 'realtimeSync'
+  };
+
+  Object.entries(mappings).forEach(([elementId, settingKey]) => {
+    const el = document.getElementById(elementId);
+    if (el) el.checked = Settings[settingKey];
+  });
+
+  // Font size select
+  const fontSelect = document.getElementById('settingFontSize');
+  if (fontSelect) fontSelect.value = Settings.fontSize;
+}
+
+/**
+ * Toggle a setting
+ * @param {string} settingKey
+ */
+function toggleSetting(settingKey) {
+  if (settingKey === 'fontSize') {
+    const select = document.getElementById('settingFontSize');
+    if (select) Settings.fontSize = select.value;
+  } else {
+    Settings[settingKey] = !Settings[settingKey];
+  }
+
+  saveSettings();
+  applySettings();
+
+  // Special handling for real-time sync
+  if (settingKey === 'realtimeSync') {
+    if (Settings.realtimeSync) {
+      showToast('Real-time sync enabled', 'success');
+    } else {
+      showToast('Real-time sync disabled - changes won\'t sync until re-enabled', 'warning');
+    }
+  }
+}
+
+/**
+ * Check if mention notifications are enabled
+ * @returns {boolean}
+ */
+function areMentionNotificationsEnabled() {
+  return Settings.mentionNotifications;
+}
+
+/**
+ * Check if sound alerts are enabled
+ * @returns {boolean}
+ */
+function areSoundAlertsEnabled() {
+  return Settings.soundAlerts;
+}
+
+/**
+ * Check if real-time sync is enabled
+ * @returns {boolean}
+ */
+function isRealtimeSyncEnabled() {
+  return Settings.realtimeSync;
+}
+
+/**
+ * Play notification sound
+ */
+function playNotificationSound() {
+  if (!Settings.soundAlerts) return;
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.frequency.value = 800;
+    oscillator.type = 'sine';
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.3);
+  } catch (e) {
+    console.error('Failed to play notification sound:', e);
+  }
+}
+
+/**
+ * Open the settings modal
+ */
+function openSettingsModal() {
+  const modal = document.getElementById('settingsModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+    syncSettingsUI();
+  }
+}
+
+/**
+ * Close the settings modal
+ */
+function closeSettingsModal() {
+  const modal = document.getElementById('settingsModal');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+  }
+}
+
+// Expose settings functions to window
+window.openSettingsModal = openSettingsModal;
+window.closeSettingsModal = closeSettingsModal;
+window.toggleSetting = toggleSetting;
+
 // ── Toast Notification System ────────────────────────────────────────────────
 
 /**
@@ -1666,6 +1901,9 @@ function conflictLoadExternal() {
  * Initialize the application
  */
 function init() {
+  // Load settings
+  loadSettings();
+
   // Load template preference
   loadCustomTemplates();
   AppState.activeTemplate = localStorage.getItem('ss_report_template') || 'cs';
@@ -2374,6 +2612,8 @@ function renderAll() {
   renderBullets();
   renderSyncItems();
   bindInputs();
+  // Re-apply settings to handle dynamically rendered elements
+  applySettings();
 }
 
 /**

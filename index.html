@@ -73,6 +73,129 @@
   </div>
 </div>
 
+<!-- Settings modal -->
+<div id="settingsModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle" aria-hidden="true">
+  <div class="modal-content modal-large">
+    <div class="modal-header">
+      <h2 id="settingsModalTitle">Settings</h2>
+      <button type="button" class="btn-modal-close" onclick="closeSettingsModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="settings-body">
+      <!-- Display Preferences -->
+      <div class="settings-section">
+        <h3 class="settings-section-title">Display Preferences</h3>
+        <div class="settings-group">
+          <label class="setting-toggle">
+            <span class="setting-label">
+              <span class="setting-name">Compact View</span>
+              <span class="setting-desc">Reduce spacing between sections</span>
+            </span>
+            <input type="checkbox" id="settingCompactView" onchange="toggleSetting('compactView')">
+            <span class="toggle-slider"></span>
+          </label>
+          <label class="setting-toggle">
+            <span class="setting-label">
+              <span class="setting-name">Show Private Notes</span>
+              <span class="setting-desc">Display the Private Notes section</span>
+            </span>
+            <input type="checkbox" id="settingShowPrivateNotes" checked onchange="toggleSetting('showPrivateNotes')">
+            <span class="toggle-slider"></span>
+          </label>
+          <label class="setting-toggle">
+            <span class="setting-label">
+              <span class="setting-name">Show Internal Comments</span>
+              <span class="setting-desc">Display the Internal Comments section</span>
+            </span>
+            <input type="checkbox" id="settingShowInternalComments" checked onchange="toggleSetting('showInternalComments')">
+            <span class="toggle-slider"></span>
+          </label>
+          <div class="setting-select">
+            <span class="setting-label">
+              <span class="setting-name">Font Size</span>
+              <span class="setting-desc">Adjust text size throughout the app</span>
+            </span>
+            <select id="settingFontSize" onchange="toggleSetting('fontSize')">
+              <option value="small">Small</option>
+              <option value="medium" selected>Medium</option>
+              <option value="large">Large</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notifications -->
+      <div class="settings-section">
+        <h3 class="settings-section-title">Notifications</h3>
+        <div class="settings-group">
+          <label class="setting-toggle">
+            <span class="setting-label">
+              <span class="setting-name">Mention Notifications</span>
+              <span class="setting-desc">Show toast when someone mentions you</span>
+            </span>
+            <input type="checkbox" id="settingMentionNotifications" checked onchange="toggleSetting('mentionNotifications')">
+            <span class="toggle-slider"></span>
+          </label>
+          <label class="setting-toggle">
+            <span class="setting-label">
+              <span class="setting-name">Sound Alerts</span>
+              <span class="setting-desc">Play sound for notifications</span>
+            </span>
+            <input type="checkbox" id="settingSoundAlerts" onchange="toggleSetting('soundAlerts')">
+            <span class="toggle-slider"></span>
+          </label>
+          <label class="setting-toggle">
+            <span class="setting-label">
+              <span class="setting-name">Show Activity Feed</span>
+              <span class="setting-desc">Display recent activity in sidebar</span>
+            </span>
+            <input type="checkbox" id="settingShowActivityFeed" checked onchange="toggleSetting('showActivityFeed')">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Collaboration -->
+      <div class="settings-section">
+        <h3 class="settings-section-title">Collaboration</h3>
+        <div class="settings-group">
+          <label class="setting-toggle">
+            <span class="setting-label">
+              <span class="setting-name">Show Presence Avatars</span>
+              <span class="setting-desc">Display who's currently online</span>
+            </span>
+            <input type="checkbox" id="settingShowPresence" checked onchange="toggleSetting('showPresence')">
+            <span class="toggle-slider"></span>
+          </label>
+          <label class="setting-toggle">
+            <span class="setting-label">
+              <span class="setting-name">Show "Edited by" Labels</span>
+              <span class="setting-desc">Display who last edited each field</span>
+            </span>
+            <input type="checkbox" id="settingShowEditedBy" checked onchange="toggleSetting('showEditedBy')">
+            <span class="toggle-slider"></span>
+          </label>
+          <label class="setting-toggle">
+            <span class="setting-label">
+              <span class="setting-name">Show Item Attribution</span>
+              <span class="setting-desc">Display who added each list item</span>
+            </span>
+            <input type="checkbox" id="settingShowItemAttribution" checked onchange="toggleSetting('showItemAttribution')">
+            <span class="toggle-slider"></span>
+          </label>
+          <label class="setting-toggle">
+            <span class="setting-label">
+              <span class="setting-name">Real-time Sync</span>
+              <span class="setting-desc">Sync changes instantly with team</span>
+            </span>
+            <input type="checkbox" id="settingRealtimeSync" checked onchange="toggleSetting('realtimeSync')">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Week-end reminder banner -->
 <div class="reminder-banner" id="reminderBanner" role="alert" aria-hidden="true" style="display:none">
   <span id="reminderText"></span>
@@ -105,6 +228,7 @@
       <button type="button" class="btn-icon btn-signout" id="signOutBtn" onclick="firebaseSignOut()" title="Sign out" aria-label="Sign out">Sign out</button>
     </div>
     <div id="presenceAvatars" class="presence-avatars" aria-label="Online users"></div>
+    <button type="button" class="btn-icon btn-settings" onclick="openSettingsModal()" title="Settings" aria-label="Open settings">&#9881;</button>
     <button type="button" class="btn-icon" id="darkModeToggle" onclick="toggleDarkMode()" title="Toggle dark mode" aria-label="Toggle dark mode">&#127769;</button>
     <span class="save-status" id="saveStatus" role="status" aria-live="polite"></span>
     <div class="week-badge" id="weekBadge" aria-label="Current week">Loading...</div>

@@ -2531,3 +2531,189 @@ textarea:focus {
   font-size: 16px;
   padding: 6px 8px;
 }
+
+/* Settings Modal */
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.settings-section {
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-section:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.settings-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 16px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.setting-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.setting-toggle:hover {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+
+.setting-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.setting-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.setting-desc {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Toggle Switch */
+.setting-toggle input[type="checkbox"] {
+  display: none;
+}
+
+.toggle-slider {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background: var(--muted-light);
+  border-radius: 12px;
+  transition: var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  transition: var(--transition-fast);
+  box-shadow: var(--shadow-sm);
+}
+
+.setting-toggle input[type="checkbox"]:checked + .toggle-slider {
+  background: var(--accent);
+}
+
+.setting-toggle input[type="checkbox"]:checked + .toggle-slider::before {
+  transform: translateX(20px);
+}
+
+/* Setting Select */
+.setting-select {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.setting-select select {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-solid);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.setting-select select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.btn-settings {
+  font-size: 16px;
+}
+
+/* Compact View Mode */
+.compact-view .card {
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.compact-view .field {
+  margin-bottom: 8px;
+}
+
+.compact-view .card-title {
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.compact-view .bullet-list {
+  gap: 6px;
+}
+
+/* Font Size Variations */
+.font-small {
+  font-size: 13px;
+}
+
+.font-small input,
+.font-small textarea,
+.font-small select {
+  font-size: 12px;
+}
+
+.font-small .card-title {
+  font-size: 12px;
+}
+
+.font-medium {
+  font-size: 14px;
+}
+
+.font-large {
+  font-size: 16px;
+}
+
+.font-large input,
+.font-large textarea,
+.font-large select {
+  font-size: 15px;
+}
+
+.font-large .card-title {
+  font-size: 15px;
+}
