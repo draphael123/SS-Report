@@ -1213,7 +1213,7 @@ let editingTemplateId = null;
 function openTemplateModal() {
   const modal = document.getElementById('templateModal');
   if (modal) {
-    modal.style.display = 'flex';
+    modal.classList.add('is-open');
     modal.setAttribute('aria-hidden', 'false');
     renderCustomTemplatesList();
     hideTemplateForm();
@@ -1226,7 +1226,7 @@ function openTemplateModal() {
 function closeTemplateModal() {
   const modal = document.getElementById('templateModal');
   if (modal) {
-    modal.style.display = 'none';
+    modal.classList.remove('is-open');
     modal.setAttribute('aria-hidden', 'true');
   }
   editingTemplateId = null;
@@ -1636,7 +1636,7 @@ function playNotificationSound() {
 function openSettingsModal() {
   const modal = document.getElementById('settingsModal');
   if (modal) {
-    modal.style.display = 'flex';
+    modal.classList.add('is-open');
     modal.setAttribute('aria-hidden', 'false');
     syncSettingsUI();
   }
@@ -1648,7 +1648,7 @@ function openSettingsModal() {
 function closeSettingsModal() {
   const modal = document.getElementById('settingsModal');
   if (modal) {
-    modal.style.display = 'none';
+    modal.classList.remove('is-open');
     modal.setAttribute('aria-hidden', 'true');
   }
 }
