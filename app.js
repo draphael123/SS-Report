@@ -851,6 +851,257 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
+// ── @Mentions System ─────────────────────────────────────────────────────────
+
+const MentionState = {
+  activeInput: null,
+  dropdown: null,
+  selectedIndex: 0,
+  searchText: '',
+  startPosition: 0
+};
+
+/**
+ * Initialize mention detection on an input element
+ * @param {HTMLInputElement} input
+ */
+function initMentionDetection(input) {
+  input.addEventListener('input', handleMentionInput);
+  input.addEventListener('keydown', handleMentionKeydown);
+  input.addEventListener('blur', () => {
+    // Delay to allow click on dropdown
+    setTimeout(hideMentionDropdown, 150);
+  });
+}
+
+/**
+ * Handle input for mention detection
+ * @param {Event} e
+ */
+function handleMentionInput(e) {
+  const input = e.target;
+  const value = input.value;
+  const cursorPos = input.selectionStart;
+
+  // Find @ before cursor
+  const textBeforeCursor = value.substring(0, cursorPos);
+  const atIndex = textBeforeCursor.lastIndexOf('@');
+
+  if (atIndex === -1) {
+    hideMentionDropdown();
+    return;
+  }
+
+  // Check if @ is at start or after a space
+  if (atIndex > 0 && textBeforeCursor[atIndex - 1] !== ' ') {
+    hideMentionDropdown();
+    return;
+  }
+
+  // Get search text after @
+  const searchText = textBeforeCursor.substring(atIndex + 1);
+
+  // Don't show if there's a space in the search (mention already completed)
+  if (searchText.includes(' ') && searchText.length > 20) {
+    hideMentionDropdown();
+    return;
+  }
+
+  MentionState.activeInput = input;
+  MentionState.searchText = searchText.toLowerCase();
+  MentionState.startPosition = atIndex;
+  MentionState.selectedIndex = 0;
+
+  showMentionDropdown(input);
+}
+
+/**
+ * Handle keydown for mention navigation
+ * @param {KeyboardEvent} e
+ */
+function handleMentionKeydown(e) {
+  if (!MentionState.dropdown || MentionState.dropdown.style.display === 'none') {
+    return;
+  }
+
+  const items = MentionState.dropdown.querySelectorAll('.mention-item');
+  if (items.length === 0) return;
+
+  switch (e.key) {
+    case 'ArrowDown':
+      e.preventDefault();
+      MentionState.selectedIndex = (MentionState.selectedIndex + 1) % items.length;
+      updateMentionSelection(items);
+      break;
+    case 'ArrowUp':
+      e.preventDefault();
+      MentionState.selectedIndex = (MentionState.selectedIndex - 1 + items.length) % items.length;
+      updateMentionSelection(items);
+      break;
+    case 'Enter':
+    case 'Tab':
+      if (items[MentionState.selectedIndex]) {
+        e.preventDefault();
+        const user = JSON.parse(items[MentionState.selectedIndex].dataset.user);
+        insertMention(user);
+      }
+      break;
+    case 'Escape':
+      e.preventDefault();
+      hideMentionDropdown();
+      break;
+  }
+}
+
+/**
+ * Update visual selection in dropdown
+ * @param {NodeList} items
+ */
+function updateMentionSelection(items) {
+  items.forEach((item, i) => {
+    item.classList.toggle('selected', i === MentionState.selectedIndex);
+  });
+}
+
+/**
+ * Show mention autocomplete dropdown
+ * @param {HTMLInputElement} input
+ */
+function showMentionDropdown(input) {
+  // Get users from presence
+  const allUsers = CollabState.presenceUsers || [];
+  const currentUser = window.firebaseAuth?.getCurrentUser?.();
+  const currentUid = currentUser?.uid;
+
+  // Filter users by search text, exclude current user
+  const filteredUsers = allUsers.filter(user => {
+    if (user.odingUserId === currentUid) return false;
+    if (!MentionState.searchText) return true;
+    return user.displayName.toLowerCase().includes(MentionState.searchText) ||
+           (user.email && user.email.toLowerCase().includes(MentionState.searchText));
+  }).slice(0, 5);
+
+  if (filteredUsers.length === 0) {
+    hideMentionDropdown();
+    return;
+  }
+
+  // Create or update dropdown
+  if (!MentionState.dropdown) {
+    MentionState.dropdown = document.createElement('div');
+    MentionState.dropdown.className = 'mention-dropdown';
+    document.body.appendChild(MentionState.dropdown);
+  }
+
+  // Position dropdown below input
+  const rect = input.getBoundingClientRect();
+  MentionState.dropdown.style.left = rect.left + 'px';
+  MentionState.dropdown.style.top = (rect.bottom + 4) + 'px';
+  MentionState.dropdown.style.width = Math.min(rect.width, 280) + 'px';
+  MentionState.dropdown.style.display = 'block';
+
+  // Render users
+  MentionState.dropdown.innerHTML = '';
+  filteredUsers.forEach((user, i) => {
+    const item = document.createElement('div');
+    item.className = 'mention-item' + (i === MentionState.selectedIndex ? ' selected' : '');
+    item.dataset.user = JSON.stringify(user);
+
+    const avatar = document.createElement('div');
+    avatar.className = 'mention-avatar';
+    avatar.style.background = user.color || stringToColor(user.displayName);
+    avatar.textContent = getInitials(user.displayName);
+
+    const info = document.createElement('div');
+    info.className = 'mention-info';
+
+    const name = document.createElement('div');
+    name.className = 'mention-name';
+    name.textContent = user.displayName;
+
+    const email = document.createElement('div');
+    email.className = 'mention-email';
+    email.textContent = user.email || '';
+
+    info.appendChild(name);
+    if (user.email) info.appendChild(email);
+
+    item.appendChild(avatar);
+    item.appendChild(info);
+
+    item.onclick = () => insertMention(user);
+
+    MentionState.dropdown.appendChild(item);
+  });
+}
+
+/**
+ * Hide mention dropdown
+ */
+function hideMentionDropdown() {
+  if (MentionState.dropdown) {
+    MentionState.dropdown.style.display = 'none';
+  }
+  MentionState.activeInput = null;
+}
+
+/**
+ * Insert mention into input
+ * @param {Object} user
+ */
+function insertMention(user) {
+  const input = MentionState.activeInput;
+  if (!input) return;
+
+  const value = input.value;
+  const before = value.substring(0, MentionState.startPosition);
+  const after = value.substring(input.selectionStart);
+
+  // Insert mention with special format: @[Name](uid:xxx)
+  const mentionText = `@${user.displayName} `;
+  const mentionData = `@[${user.displayName}](uid:${user.odingUserId})`;
+
+  // For display, just show @Name, but store the full format
+  input.value = before + mentionText + after;
+  input.dataset.mentions = (input.dataset.mentions || '') + mentionData + '|';
+
+  // Move cursor after mention
+  const newPos = before.length + mentionText.length;
+  input.setSelectionRange(newPos, newPos);
+  input.focus();
+
+  hideMentionDropdown();
+
+  // Trigger input event to save
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+/**
+ * Parse mentions from text
+ * @param {string} text
+ * @returns {string[]} Array of user UIDs mentioned
+ */
+function parseMentions(text) {
+  if (!text) return [];
+  const mentionRegex = /@\[([^\]]+)\]\(uid:([^)]+)\)/g;
+  const mentions = [];
+  let match;
+  while ((match = mentionRegex.exec(text)) !== null) {
+    mentions.push(match[2]); // Push the UID
+  }
+  return mentions;
+}
+
+/**
+ * Extract mentions from an input's data attribute
+ * @param {HTMLInputElement} input
+ * @returns {string[]} Array of user UIDs
+ */
+function getMentionsFromInput(input) {
+  const mentionsData = input.dataset.mentions || '';
+  return parseMentions(mentionsData);
+}
+
 /**
  * Handle presence update from Firebase
  * @param {Array} users
@@ -1633,6 +1884,11 @@ function renderEditableList(containerId, items, options) {
       update();
     };
 
+    // Initialize @mention detection if signed in
+    if (window.firebaseAuth?.isSignedIn?.()) {
+      initMentionDetection(input);
+    }
+
     row.appendChild(input);
 
     // Carry-forward button for bullets
@@ -1801,11 +2057,21 @@ function renderCommentThread(itemId, itemType, wrapper) {
   const input = document.createElement('input');
   input.type = 'text';
   input.className = 'comment-input';
-  input.placeholder = 'Write a comment...';
+  input.placeholder = 'Write a comment... (use @ to mention)';
+
+  // Initialize mention detection
+  initMentionDetection(input);
+
   input.onkeydown = (e) => {
+    // Don't submit if mention dropdown is open
+    if (MentionState.dropdown && MentionState.dropdown.style.display !== 'none') {
+      return;
+    }
     if (e.key === 'Enter' && input.value.trim()) {
-      submitComment(itemId, itemType, input.value.trim(), wrapper);
+      const mentions = getMentionsFromInput(input);
+      submitComment(itemId, itemType, input.value.trim(), wrapper, mentions);
       input.value = '';
+      input.dataset.mentions = '';
     }
   };
 
@@ -1814,8 +2080,10 @@ function renderCommentThread(itemId, itemType, wrapper) {
   sendBtn.textContent = 'Send';
   sendBtn.onclick = () => {
     if (input.value.trim()) {
-      submitComment(itemId, itemType, input.value.trim(), wrapper);
+      const mentions = getMentionsFromInput(input);
+      submitComment(itemId, itemType, input.value.trim(), wrapper, mentions);
       input.value = '';
+      input.dataset.mentions = '';
     }
   };
 
@@ -1835,8 +2103,9 @@ function renderCommentThread(itemId, itemType, wrapper) {
  * @param {string} itemType
  * @param {string} text
  * @param {HTMLElement} wrapper
+ * @param {Array} mentions - Array of user UIDs being mentioned
  */
-function submitComment(itemId, itemType, text, wrapper) {
+function submitComment(itemId, itemType, text, wrapper, mentions) {
   if (!window.firebaseAuth?.addComment) return;
 
   window.firebaseAuth.addComment({
@@ -1846,6 +2115,10 @@ function submitComment(itemId, itemType, text, wrapper) {
     text: text
   }).then(() => {
     showToast('Comment added', 'success');
+    // Log activity with mentions for notifications
+    if (mentions && mentions.length > 0) {
+      logActivity('mention', 'mentioned you in a comment', text, mentions);
+    }
     logActivity('comment', 'commented on a ' + itemType, text);
   }).catch(err => {
     console.error('Failed to add comment:', err);

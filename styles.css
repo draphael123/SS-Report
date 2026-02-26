@@ -1573,6 +1573,70 @@ input[type="number"] { -moz-appearance: textfield; }
   padding: 16px 0;
 }
 
+/* Mention Dropdown */
+.mention-dropdown {
+  position: fixed;
+  z-index: 10000;
+  background: var(--surface-elevated);
+  backdrop-filter: var(--glass-blur-strong);
+  -webkit-backdrop-filter: var(--glass-blur-strong);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  display: none;
+}
+
+.mention-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.mention-item:hover,
+.mention-item.selected {
+  background: var(--accent-light);
+}
+
+.mention-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: white;
+  text-transform: uppercase;
+}
+
+.mention-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.mention-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mention-email {
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Copy from last week */
 .btn-copy-last {
   width: 100%;
