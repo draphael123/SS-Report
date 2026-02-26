@@ -3,156 +3,204 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Weekly Update Builder - Create and manage CS team weekly reports">
+  <meta name="theme-color" content="#2563eb">
   <title>Weekly Update Builder</title>
   <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
+<!-- Toast notification container -->
+<div id="toastContainer" class="toast-container" aria-live="polite" aria-label="Notifications"></div>
+
+<!-- Mobile overlay -->
+<div id="mobileOverlay" class="mobile-overlay" onclick="closeMobileMenu()"></div>
+
+<!-- Conflict resolution modal -->
+<div id="conflictModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="conflictTitle" aria-hidden="true">
+  <div class="modal-content">
+    <h2 id="conflictTitle">Data Changed in Another Tab</h2>
+    <p>The data was modified in another browser tab. What would you like to do?</p>
+    <div class="modal-actions">
+      <button type="button" class="btn-modal btn-primary" onclick="conflictKeepMine()">Keep My Changes</button>
+      <button type="button" class="btn-modal btn-secondary" onclick="conflictLoadExternal()">Load External Changes</button>
+    </div>
+  </div>
+</div>
+
 <!-- Week-end reminder banner -->
-<div class="reminder-banner" id="reminderBanner" style="display:none">
+<div class="reminder-banner" id="reminderBanner" role="alert" aria-hidden="true" style="display:none">
   <span id="reminderText"></span>
 </div>
 
 <header>
-  <div class="logo">Weekly Update Builder</div>
+  <div class="header-left">
+    <button type="button" class="btn-hamburger" id="mobileMenuBtn" onclick="toggleMobileMenu()" aria-label="Open navigation menu" aria-expanded="false">
+      <span class="hamburger-line"></span>
+      <span class="hamburger-line"></span>
+      <span class="hamburger-line"></span>
+    </button>
+    <div class="logo">Weekly Update Builder</div>
+  </div>
   <div class="header-right">
-    <select id="templateSelect" class="template-select" title="Report template">
+    <button type="button" class="btn-undo-redo" id="undoBtn" onclick="undo()" title="Undo (Ctrl+Z)" aria-label="Undo" disabled>
+      <span aria-hidden="true">&#x21B6;</span>
+    </button>
+    <button type="button" class="btn-undo-redo" id="redoBtn" onclick="redo()" title="Redo (Ctrl+Y)" aria-label="Redo" disabled>
+      <span aria-hidden="true">&#x21B7;</span>
+    </button>
+    <select id="templateSelect" class="template-select" title="Report template" aria-label="Select report template">
       <option value="cs">CS Weekly</option>
       <option value="operations">Operations</option>
     </select>
-    <button type="button" class="btn-icon" id="darkModeToggle" onclick="toggleDarkMode()" title="Toggle dark mode">🌙</button>
-    <span class="save-status" id="saveStatus"></span>
-    <div class="week-badge" id="weekBadge">Loading...</div>
+    <button type="button" class="btn-icon" id="darkModeToggle" onclick="toggleDarkMode()" title="Toggle dark mode" aria-label="Toggle dark mode">&#127769;</button>
+    <span class="save-status" id="saveStatus" role="status" aria-live="polite"></span>
+    <div class="week-badge" id="weekBadge" aria-label="Current week">Loading...</div>
   </div>
 </header>
 
 <!-- SIDEBAR -->
-<div class="history-pane">
-  <div class="history-label">History</div>
-  <button type="button" class="btn-new-week" onclick="startNewWeek()">+ New Week</button>
-  <button type="button" class="btn-copy-last" id="copyLastWeekBtn" onclick="copyFromLastWeek()" style="display:none">📋 Copy from last week</button>
-  <div id="historyList"></div>
+<div class="history-pane" role="navigation" aria-label="Week history">
+  <div class="history-label" id="historyLabel">History</div>
+  <button type="button" class="btn-new-week" onclick="startNewWeek()" aria-label="Start a new week">+ New Week</button>
+  <button type="button" class="btn-copy-last" id="copyLastWeekBtn" onclick="copyFromLastWeek()" style="display:none" aria-label="Copy data from last week">Copy from last week</button>
+  <div id="historyList" role="listbox" aria-labelledby="historyLabel"></div>
 
-  <div class="sparkline-wrap" id="sparkWrap" style="display:none">
+  <div class="sparkline-wrap" id="sparkWrap" style="display:none" aria-label="Conversation trends">
     <div class="sparkline-title">Conversations / Week</div>
-    <svg class="sparkline-chart" id="sparkSvg" viewBox="0 0 160 48" preserveAspectRatio="none"></svg>
+    <svg class="sparkline-chart" id="sparkSvg" viewBox="0 0 160 48" preserveAspectRatio="none" role="img" aria-label="Sparkline chart showing conversation trends"></svg>
     <div class="sparkline-labels" id="sparkLabels"></div>
   </div>
 
   <!-- How to Use -->
   <div class="how-to-wrap">
-    <button type="button" class="how-to-toggle" id="howToToggle" onclick="toggleHowTo()" aria-expanded="false">
-      <span class="how-to-toggle-icon">?</span> How to Use
+    <button type="button" class="how-to-toggle" id="howToToggle" onclick="toggleHowTo()" aria-expanded="false" aria-controls="howToContent">
+      <span class="how-to-toggle-icon" aria-hidden="true">?</span> How to Use
     </button>
-    <div class="how-to-content" id="howToContent">
+    <div class="how-to-content" id="howToContent" role="region" aria-labelledby="howToToggle">
       <ol>
-        <li><strong>Report Period</strong> — Enter team name and date range.</li>
-        <li><strong>CS Router Metrics</strong> — Add metric period, total conversations (vs last week shown), median response time, and goal.</li>
-        <li><strong>Meetings</strong> — Add or remove meetings. Use "Copy from last week" to duplicate.</li>
-        <li><strong>Accomplishments</strong> — Check recurring items or add custom ones. Use → to carry items to next week.</li>
-        <li><strong>Notes for Next Week</strong> — Parking lot items that carry forward automatically.</li>
-        <li><strong>Front Office Sync</strong> — Meeting title and agenda items.</li>
-        <li><strong>Preview</strong> — Print, copy plain, or Slack. Ctrl+Enter copies Slack, Ctrl+Shift+C copies plain.</li>
-        <li><strong>Templates</strong> — Switch between CS Weekly and Operations presets.</li>
-        <li><strong>Export/Import</strong> — Backup or restore your data as JSON.</li>
+        <li><strong>Report Period</strong> &mdash; Enter team name and date range.</li>
+        <li><strong>CS Router Metrics</strong> &mdash; Add metric period, total conversations (vs last week shown), median response time, and goal.</li>
+        <li><strong>Meetings</strong> &mdash; Add or remove meetings. Use "Copy from last week" to duplicate.</li>
+        <li><strong>Accomplishments</strong> &mdash; Check recurring items or add custom ones. Use &rarr; to carry items to next week.</li>
+        <li><strong>Notes for Next Week</strong> &mdash; Parking lot items that carry forward automatically.</li>
+        <li><strong>Front Office Sync</strong> &mdash; Meeting title and agenda items.</li>
+        <li><strong>Preview</strong> &mdash; Print, copy plain, or Slack. Ctrl+Enter copies Slack, Ctrl+Shift+C copies plain.</li>
+        <li><strong>Templates</strong> &mdash; Switch between CS Weekly and Operations presets.</li>
+        <li><strong>Export/Import</strong> &mdash; Backup or restore your data as JSON.</li>
+        <li><strong>Undo/Redo</strong> &mdash; Use Ctrl+Z to undo, Ctrl+Y to redo changes.</li>
       </ol>
     </div>
   </div>
 </div>
 
 <!-- EDITOR -->
-<div class="editor-pane">
+<main class="editor-pane" role="main">
 
   <div class="card">
-    <div class="card-title"><span class="dot" style="background:var(--accent)"></span> Report Period</div>
+    <div class="card-title"><span class="dot" style="background:var(--accent)" aria-hidden="true"></span> Report Period</div>
     <div class="grid2">
-      <div class="field"><span class="lbl">Team</span><input type="text" id="teamName"></div>
-      <div class="field"><span class="lbl">Date Range</span><input type="text" id="dateRange"></div>
+      <div class="field">
+        <label class="lbl" for="teamName">Team</label>
+        <input type="text" id="teamName" autocomplete="organization">
+      </div>
+      <div class="field">
+        <label class="lbl" for="dateRange">Date Range</label>
+        <input type="text" id="dateRange">
+      </div>
     </div>
   </div>
 
   <div class="card">
-    <div class="card-title"><span class="dot" style="background:var(--accent2)"></span> CS Router Metrics</div>
-    <div class="field"><span class="lbl">Metric Period</span><input type="text" id="metricPeriod"></div>
+    <div class="card-title"><span class="dot" style="background:var(--accent2)" aria-hidden="true"></span> CS Router Metrics</div>
+    <div class="field">
+      <label class="lbl" for="metricPeriod">Metric Period</label>
+      <input type="text" id="metricPeriod">
+    </div>
     <div class="grid2">
       <div class="field">
-        <span class="lbl">Total Conversations</span>
-        <input type="number" id="totalConversations" placeholder="3032">
-        <div class="metric-hint" id="convHint"></div>
+        <label class="lbl" for="totalConversations">Total Conversations</label>
+        <input type="number" id="totalConversations" placeholder="3032" min="0" inputmode="numeric">
+        <div class="metric-hint" id="convHint" aria-live="polite"></div>
       </div>
       <div class="field">
-        <span class="lbl">Median Response Time</span>
+        <label class="lbl" for="medianResponseTime">Median Response Time</label>
         <input type="text" id="medianResponseTime" placeholder="2 minutes 11 seconds">
-        <div class="goal-indicator" id="goalIndicator"></div>
+        <div class="goal-indicator" id="goalIndicator" role="status" aria-live="polite"></div>
       </div>
       <div class="field" style="grid-column:1/-1">
-        <span class="lbl">Response Time Goal</span>
+        <label class="lbl" for="responseGoal">Response Time Goal</label>
         <input type="text" id="responseGoal">
       </div>
     </div>
   </div>
 
   <div class="card">
-    <div class="card-title"><span class="dot" style="background:var(--warn)"></span> Meetings Attended</div>
-    <div id="meetingsList" class="bullet-list"></div>
-    <button class="btn-add" onclick="addMeeting()">+ Add Meeting</button>
+    <div class="card-title"><span class="dot" style="background:var(--warn)" aria-hidden="true"></span> Meetings Attended</div>
+    <div id="meetingsList" class="bullet-list" role="list" aria-label="Meetings list"></div>
+    <button type="button" class="btn-add" onclick="addMeeting()" aria-label="Add meeting">+ Add Meeting</button>
   </div>
 
   <div class="card">
-    <div class="card-title"><span class="dot" style="background:var(--accent2)"></span> Accomplishments / Updates</div>
-    <div class="sub-label">Recurring Items</div>
-    <div id="presetsGrid"></div>
+    <div class="card-title"><span class="dot" style="background:var(--accent2)" aria-hidden="true"></span> Accomplishments / Updates</div>
+    <div class="sub-label" id="recurringLabel">Recurring Items</div>
+    <div id="presetsGrid" role="group" aria-labelledby="recurringLabel"></div>
     <hr class="divider">
-    <div class="sub-label">One-off Items This Week</div>
-    <div id="bulletsList" class="bullet-list"></div>
-    <button class="btn-add" onclick="addBullet()">+ Add Item</button>
+    <div class="sub-label" id="oneOffLabel">One-off Items This Week</div>
+    <div id="bulletsList" class="bullet-list" role="list" aria-labelledby="oneOffLabel"></div>
+    <button type="button" class="btn-add" onclick="addBullet()" aria-label="Add accomplishment item">+ Add Item</button>
   </div>
 
   <div class="card">
-    <div class="card-title"><span class="dot" style="background:var(--danger)"></span> Front Office Sync / Upcoming</div>
-    <div class="field"><span class="lbl">Meeting Title</span><input type="text" id="syncMeeting"></div>
-    <div id="syncItems" class="bullet-list"></div>
-    <button class="btn-add" onclick="addSyncItem()">+ Add Agenda Item</button>
+    <div class="card-title"><span class="dot" style="background:var(--danger)" aria-hidden="true"></span> Front Office Sync / Upcoming</div>
+    <div class="field">
+      <label class="lbl" for="syncMeeting">Meeting Title</label>
+      <input type="text" id="syncMeeting">
+    </div>
+    <div id="syncItems" class="bullet-list" role="list" aria-label="Sync agenda items"></div>
+    <button type="button" class="btn-add" onclick="addSyncItem()" aria-label="Add agenda item">+ Add Agenda Item</button>
   </div>
 
   <div class="card">
-    <div class="card-title"><span class="dot" style="background:var(--accent2)"></span> Notes for Next Week</div>
+    <div class="card-title"><span class="dot" style="background:var(--accent2)" aria-hidden="true"></span> Notes for Next Week</div>
+    <label for="notesForNextWeek" class="visually-hidden">Notes for next week</label>
     <textarea id="notesForNextWeek" class="notes-area" placeholder="Follow-up items that carry forward to next week's report..."></textarea>
   </div>
 
   <div class="card">
-    <div class="card-title"><span class="dot" style="background:var(--muted)"></span> Private Notes</div>
-    <textarea id="privateNotes" class="notes-area" placeholder="Context for yourself — not included in the report. (e.g. 'spike on Tuesday due to outage', 'follow up with Ashley on X')"></textarea>
+    <div class="card-title"><span class="dot" style="background:var(--muted)" aria-hidden="true"></span> Private Notes</div>
+    <label for="privateNotes" class="visually-hidden">Private notes</label>
+    <textarea id="privateNotes" class="notes-area" placeholder="Context for yourself - not included in the report. (e.g. 'spike on Tuesday due to outage', 'follow up with Ashley on X')"></textarea>
   </div>
 
-</div>
+</main>
 
 <!-- PREVIEW -->
-<div class="preview-pane">
+<aside class="preview-pane" role="complementary" aria-label="Report preview">
   <div class="preview-header">
     <span class="pane-label">Live Preview</span>
     <div class="preview-actions">
-      <button type="button" class="btn-reset" onclick="resetWeek()">Reset</button>
-      <button type="button" class="btn-print" onclick="printReport()">🖨 Print</button>
-      <button type="button" class="btn-slack" id="slackBtn" onclick="copySlack()">⧓ Copy for Slack</button>
-      <button type="button" class="btn-copy" id="copyBtn" onclick="copyPlain()">⎘ Copy Plain</button>
+      <button type="button" class="btn-reset" onclick="resetWeek()" aria-label="Reset this week to defaults">Reset</button>
+      <button type="button" class="btn-print" onclick="printReport()" aria-label="Print report">Print</button>
+      <button type="button" class="btn-slack" id="slackBtn" onclick="copySlack()" aria-label="Copy for Slack (Ctrl+Enter)">Copy for Slack</button>
+      <button type="button" class="btn-copy" id="copyBtn" onclick="copyPlain()" aria-label="Copy plain text (Ctrl+Shift+C)">Copy Plain</button>
     </div>
   </div>
-  <div class="preview-box" id="previewBox">Start filling in the form to see your report...</div>
+  <div class="preview-box" id="previewBox" role="region" aria-live="polite" aria-label="Report preview content">Start filling in the form to see your report...</div>
   <div class="preview-footer">
-    <div class="char-count" id="charCount"></div>
+    <div class="char-count" id="charCount" aria-live="polite"></div>
     <div class="footer-actions">
-      <button type="button" class="btn-link" onclick="exportData()">Export data</button>
-      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
-      <button type="button" class="btn-link" onclick="document.getElementById('importFile').click()">Import</button>
-      <span style="font-size:10px; color: var(--muted)">⧓ Slack &nbsp;|&nbsp; ⎘ Plain</span>
+      <button type="button" class="btn-link" onclick="exportData()" aria-label="Export all data as JSON">Export data</button>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)" aria-label="Import data file">
+      <button type="button" class="btn-link" onclick="document.getElementById('importFile').click()" aria-label="Import data from JSON file">Import</button>
+      <span class="shortcut-hint" aria-hidden="true">Ctrl+Enter: Slack | Ctrl+Shift+C: Plain</span>
     </div>
   </div>
-</div>
+</aside>
 
 <!-- Hidden print container -->
-<div id="printContainer" class="print-container"></div>
+<div id="printContainer" class="print-container" aria-hidden="true"></div>
 
 <script src="app.js"></script>
 </body>
